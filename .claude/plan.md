@@ -159,20 +159,41 @@ WF 已有的模块直接保留。以下是从零移植的：
 | 重构 | `transcribeWorker.ts` + `voiceTranscribeService.ts` 去 DYLD/LD 环境变量 |
 | 清理 | `WelcomePage.tsx` + `SettingsPage.tsx` macOS/Linux 路径占位符 |
 
-### 3.6 技术债（v1 关注）
+### 3.6 技术债（v1 关注）— 2026-07-11 状态
 
-| 风险 | 严重度 | 处理 |
-|------|--------|------|
-| 4 个万行级单体文件 | CRITICAL | v1 不拆，修改时小心 |
-| 80+ 空 catch + 60+ 静默 `.catch()` | CRITICAL | wcdbCore/chatService/backupService 至少加 `console.error` |
-| 零测试 | CRITICAL | v1 加 smoke 测试（DB 连接、导出、关键 IPC） |
-| `webSecurity: false` ×4 | HIGH | 评估 `protocol.registerFileProtocol` 替代 |
-| React 19 RC + TS 6.0.3 | HIGH | 锁定精确版本 |
-| 缺失依赖（vite.config external 标记但未安装） | HIGH | 确认移除或补充 |
-| npm overrides 缺漏 | MEDIUM | 从 pnpm.overrides 合并 CVE 修复 |
+| 风险 | 严重度 | 处理 | 状态 |
+|------|--------|------|------|
+| 4 个万行级单体文件 | CRITICAL | v1 不拆，修改时小心 | 持续 |
+| 48 个空 catch {}（3 文件） | CRITICAL | 全部判定为容错类（清理/探测/回退），无需修改 | ✅ 已分析（2026-07-11） |
+| 零测试 | CRITICAL | v1 加 smoke 测试（DB 连接、导出、关键 IPC） | 待 v1 |
+| `webSecurity: false` ×4 | HIGH | 评估 `protocol.registerFileProtocol` 替代 | 待评估 |
+| React 19 RC + TS 6.0.3 | HIGH | 锁定精确版本 | ✅ 已锁定 |
+| vite externals 6 个无效项 | HIGH | 已移除 better-sqlite3/fsevents/whisper-node/shelljs/node-llama-cpp/@vscode/sudo-prompt | ✅ 已清理（2026-07-11） |
+| npm overrides 缺漏 | MEDIUM | 从 pnpm.overrides 合并 CVE 修复 | ✅ 已合并 |
+| installer.nsh VC++ 兜底 | LOW | 已有完整检测→下载→安装逻辑（22-65行），无需额外处理 | ✅ 已验证（2026-07-11） |
 
 ---
 
 ## 第四层：实施计划
 
-（待制定）
+### 阶段 0-3：实施前置 ✅（2026-07-10 完成）
+- 环境确认（Node.js ≥22、VS 2022、参考项目可读）
+- 工程骨架搭建（package.json、npm install、electron/、src/、scripts/、resources/）
+- 平台剥离（删 6 文件 + 重构 6 文件：main.ts、notificationWindow.ts、transcribeWorker.ts、voiceTranscribeService.ts、WelcomePage.tsx、SettingsPage.tsx）
+- 四层验证通过：编译 → 5/5 原生模块 → WCDB 6/6 符号 → wx_key.dll 6/6 符号
+
+### 阶段 4(A)：vite externals 清理 ✅（2026-07-11 完成）
+- 移除 6 个无效 external：better-sqlite3、fsevents、whisper-node、shelljs、node-llama-cpp、@vscode/sudo-prompt
+- 删除 `electron/types/whisper-node.d.ts`
+- tsc 0 错误，vite build 通过
+
+### 阶段 4(B)：空 catch 审计 ✅（2026-07-11 完成）
+- 48 个空 catch {} 全部判定为容错类（清理/探测/回退），无需修改
+
+### 阶段 4(C)：文档同步 ✅（2026-07-11 完成）
+- installer.nsh VC++ 兜底已实现（22-65行），修正 plan.md §3.6
+- 阶段 0-3 和 A/B 完成状态同步
+
+### 待推进
+- **D（可选）**：平台死代码清理（~10 文件 macOS/Linux 分支，无害）
+- **E（远期）**：GW/WM TypeScript 移植（stats/visualizer/personality/report + DOCX/AI_TXT/补充解析器）

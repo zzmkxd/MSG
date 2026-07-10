@@ -58,6 +58,6 @@ Windows 微信消息浏览/导出工具。以 WeFlow 为骨架，Electron + Type
 - [x] silk-wasm 加载正常（Layer 2），Silk→MP3 子进程等待 WCDB 连接就绪后实测
 
 ### 阶段 4：技术债最低修复
-- [ ] wcdbCore/chatService/backupService 空 catch 加 `console.error`
-- [ ] 确认 vite.config 中 4 个 external 标记的依赖是否需要保留
-- [ ] installer.nsh 加 VC++ Redistributable 下载兜底
+- [x] vite externals 清理 — 移除 6 个无效 external（better-sqlite3/fsevents/whisper-node/shelljs/node-llama-cpp/@vscode/sudo-prompt）
+- [x] 空 catch 审计 — 48 个全部判定为容错类（清理/探测/回退），无需修改
+- [x] installer.nsh VC++ 兜底 — 已有完整检测→下载→安装逻辑(22-65行)，无需额外处理

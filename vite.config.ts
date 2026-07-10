@@ -110,14 +110,8 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: [
-                'better-sqlite3',
                 'koffi',
-                'fsevents',
-                'whisper-node',
-                'shelljs',
                 'exceljs',
-                'node-llama-cpp',
-                '@vscode/sudo-prompt',
                 'silk-wasm',
                 // 原生 .node 二进制不可打包，运行时从 asarUnpack 目录解析
                 '@hicccc77/electron-liquid-glass'
@@ -134,8 +128,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: [
-                'koffi',
-                'fsevents'
+                'koffi'
               ],
               output: {
                 entryFileNames: 'annualReportWorker.js',
@@ -153,8 +146,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: [
-                'koffi',
-                'fsevents'
+                'koffi'
               ],
               output: {
                 entryFileNames: 'dualReportWorker.js',
@@ -202,9 +194,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: [
-                'better-sqlite3',
-                'koffi',
-                'fsevents'
+                'koffi'
               ],
               output: {
                 entryFileNames: 'wcdbWorker.js',
@@ -241,9 +231,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               external: [
-                'better-sqlite3',
                 'koffi',
-                'fsevents',
                 'exceljs'
               ],
               output: {
