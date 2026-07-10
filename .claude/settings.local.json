@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version)",
+      "Bash(pip install *)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import sys; [print\\(p\\) for p in sys.path]\")",
+      "Bash(python -c \"from Crypto.Protocol.KDF import PBKDF2; print\\('OK'\\)\")",
+      "Bash(rustc --version)",
+      "Read(//e/Learn_zone/**)",
+      "Read(//c/Users/**)",
+      "Bash(find /e -maxdepth 2 -name \"ginger_wechat_portrait*\")",
+      "Bash(unzip *)",
+      "WebSearch",
+      "Bash(git clone *)",
+      "Bash(xargs grep -l \"decrypt\\\\|Decrypt\\\\|key.*extract\\\\|getKey\\\\|setKey\\\\|CipherKey\\\\|sqlcipher\\\\|hook\\\\|inject\\\\|wx_key\\\\|wcdb\\\\|passphrase\\\\|SetDBKey\")",
+      "Bash(node -e \"console.log\\(process.version\\)\")",
+      "Bash(npx asar *)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(npm --version)",
+      "Bash(cp *)",
+      "Bash(cp -r WeFlow_for_archlinux-main/resources/ resources/)",
+      "Bash(cp -r WeFlow_for_archlinux-main/public/ public/)",
+      "Bash(cp -r WeFlow_for_archlinux-main/scripts/ scripts/)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(npx electron *)",
+      "Bash(ELECTRON_MIRROR=\"https://npmmirror.com/mirrors/electron/\" node *)",
+      "Bash(git add *)"
+    ]
+  }
+}

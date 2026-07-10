@@ -1,586 +1,157 @@
-# 💬 fork-WeChatMsg - 微信消息导出工具
+<p align="center">
+  <img src="app.jpg" alt="WeFlow 应用预览" width="90%">
+</p>
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)
-![PyQt](https://img.shields.io/badge/PyQt-5.x-green)
-![License](https://img.shields.io/badge/License-GPL%20v3-blue)
+<h1 align="center">WeFlow</h1>
 
-## 📦 项目来源
+<p align="center">
+  WeFlow 是一个<strong>完全本地</strong>的微信<strong>实时</strong>聊天记录查看、分析与导出工具。<br>
+  它可以获取你的微信聊天记录并将其导出，还可以根据你的聊天记录为你生成独一无二的数据与年度报告。
+</p>
 
-- **原项目**: [LC044/WeChatMsg](https://github.com/LC044/WeChatMsg)
-- **原作者**: LC044
-- **开源协议**: GNU General Public License v3.0 (GPL-3.0)
-- **Fork时间**: 2024年
+<p align="center">
+  <a href="https://github.com/hicccc77/WeFlow/stargazers"><img src="https://img.shields.io/github/stars/hicccc77/WeFlow?style=flat&label=Stars&labelColor=2A3B4C&color=60A5FA" alt="Stargazers"></a>
+  <a href="https://github.com/hicccc77/WeFlow/network/members"><img src="https://img.shields.io/github/forks/hicccc77/WeFlow?style=flat&label=Forks&labelColor=2A3B4C&color=60A5FA" alt="Forks"></a>
+  <a href="https://github.com/hicccc77/WeFlow/releases"><img src="https://img.shields.io/github/downloads/hicccc77/WeFlow/total?style=flat&label=Downloads&labelColor=2A3B4C&color=60A5FA" alt="Downloads"></a>
+  <br><br>
+  <a href="https://t.me/weflow_cc"><img src="https://img.shields.io/badge/Telegram-频道-60A5FA?style=flat&logo=telegram&logoColor=white&labelColor=2A3B4C&color=60A5FA" alt="Telegram Channel" style="height: 24px; vertical-align: middle;"></a>
+  <a href="https://star-history.com/#hicccc77/WeFlow"><img src="https://api.star-history.com/badge?repo=hicccc77/WeFlow&theme=dark" alt="Star History Rank" style="height: 30px; vertical-align: middle;"></a>
+</p>
 
-## 🔧 二次开发内容
+> [!TIP]
+> 仅支持微信 **4.0 及以上**版本
+>
+> 如果导出聊天记录后，想深入分析聊天内容可以试试 [ChatLab](https://chatlab.fun/)
 
-本项目为原项目的学习研究版本,主要用于:
-- 学习微信数据库的解密和数据提取
-- 研究数据可视化和统计分析技术
-- 了解GUI应用的开发方法
 
-## ⚠️ 免责声明
+## 主要功能
 
-本项目仅供学习研究使用,请勿用于非法用途。使用本项目所产生的一切后果由使用者自行承担。
+- 本地实时查看聊天记录
+- 朋友圈图片、视频、**实况**的预览和解密
+- 统计分析与群聊画像
+- 年度报告与可视化概览
+- 导出聊天记录为 HTML 等格式
+- HTTP API 接口（面向开发者）
+- 查看完整能力清单：[详细功能](#详细功能清单)
 
-## 📖 项目简介
+## 支持平台与设备
 
-fork-WeChatMsg是微信PC端消息记录导出与分析工具,支持导出聊天记录、联系人、图片视频等数据,并提供数据统计和可视化分析功能。
+| 平台 | 设备/架构 | 安装包 |
+|------|----------|--------|
+| Windows | Windows10+、x64 | `.exe` |
+| macOS | Apple Silicon（M 系列，arm64） | `.dmg` |
+| Linux | x64 设备（amd64） | `.AppImage`、`.tar.gz` |
 
-## 🏗️ 系统架构
+## 快速开始
 
-```mermaid
-graph TB
-    subgraph "数据获取层"
-        WeChatDB[微信数据库]
-        KeyExtract[密钥提取]
-        DBDecrypt[数据库解密]
-    end
-    
-    subgraph "数据处理层"
-        DataParser[数据解析]
-        MsgParser[消息解析]
-        MediaParser[媒体解析]
-        ContactParser[联系人解析]
-    end
-    
-    subgraph "分析统计层"
-        WordCloud[词云生成]
-        ChatAnalysis[聊天分析]
-        UserAnalysis[用户分析]
-        TimeAnalysis[时间分析]
-    end
-    
-    subgraph "导出输出层"
-        HTMLExport[HTML导出]
-        CSVExport[CSV导出]
-        PDFExport[PDF导出]
-        ChartExport[图表导出]
-    end
-    
-    subgraph "界面层"
-        GUIClient[图形界面]
-        CLI[命令行工具]
-    end
-    
-    WeChatDB --> KeyExtract
-    KeyExtract --> DBDecrypt
-    
-    DBDecrypt --> DataParser
-    DataParser --> MsgParser
-    DataParser --> MediaParser
-    DataParser --> ContactParser
-    
-    MsgParser --> WordCloud
-    MsgParser --> ChatAnalysis
-    MsgParser --> UserAnalysis
-    MsgParser --> TimeAnalysis
-    
-    ChatAnalysis --> HTMLExport
-    ChatAnalysis --> CSVExport
-    ChatAnalysis --> PDFExport
-    ChatAnalysis --> ChartExport
-    
-    GUIClient --> DataParser
-    CLI --> DataParser
-```
+若你只想使用成品版本，可前往 [Releases](https://github.com/hicccc77/WeFlow/releases) 下载并安装。
 
-## ⚠️ 免责声明
+ArchLinux 用户可以选择 `yay -S weflow` 快速安装
 
-**本项目仅供个人学习和研究使用,请勿用于非法用途。使用本项目所产生的一切后果由使用者自行承担。**
+## 详细功能清单
 
-## 🚀 快速开始
+| 功能模块 | 说明 |
+|---------|------|
+| **聊天** | 解密聊天中的图片、视频、实况；支持**修改**本地消息 |
+| **消息防撤回** | 防止其他人发送的消息被撤回 |
+| **实时弹窗通知** | 新消息到达时提供桌面弹窗提醒，便于及时查看重要会话，提供黑白名单功能 |
+| **私聊分析** | 统计好友间消息数量；分析消息类型与发送比例；查看消息时段分布等 |
+| **群聊分析** | 查看群成员详细信息；分析群内发言排行、活跃时段和媒体内容 |
+| **年度报告** | 生成按年统计的年度报告，或跨年度的长期历史报告 |
+| **双人报告** | 选择指定好友，基于双方聊天记录生成专属分析报告 |
+| **消息导出** | 将微信聊天记录导出为多种格式：JSON、HTML、Markdown、TXT、Excel、CSV、PGSQL、ChatLab专属格式等 |
+| **朋友圈** | 解密朋友圈图片、视频、实况；导出朋友圈内容；拦截朋友圈的删除与隐藏操作； |
+| **联系人** | 导出微信好友、群聊、公众号信息；找回部分曾经的好友 |
+| **HTTP API 映射** | 将本地消息能力映射为 HTTP API，便于对接外部系统、自动化脚本与二次开发 |
 
-### 环境要求
+## HTTP API
 
-- Python 3.8+
-- 微信PC版(最新版本)
+WeFlow 提供本地 HTTP API 服务，支持通过接口查询消息数据，可用于与其他工具集成或二次开发。
 
-### 安装步骤
+- **启用方式**：设置 → API 服务 → 启动服务
+- **默认端口**：5031
+- **访问地址**：`http://127.0.0.1:5031`
+- **支持格式**：原始 JSON 或 [ChatLab](https://chatlab.fun/) 标准格式
+
+完整接口文档：[点击查看](docs/HTTP-API.md)
+
+## Linux 平台修正说明 (2026-07-08)
+
+本分支针对 Linux 平台（特别是 Flatpak 安装的微信和 AppImage 打包）做了以下修正：
+
+1. **Flatpak 微信支持**：原代码无法拉起通过 Flatpak 安装的微信（`com.tencent.WeChat`），已在启动列表中新增 `flatpak run com.tencent.WeChat` 及 Flatpak 沙箱内二进制路径
+2. **AppImage 环境 PATH 补全**：AppImage 内部 PATH 极简且不含 `/usr/bin`、`/var/lib/flatpak/exports/bin` 等系统路径，导致 `spawn` 找不到 `flatpak`、`pidof` 等命令
+3. **可执行权限修复**：`xkey_helper_linux` 和 `welive` 二进制文件原始权限为 644（无可执行位），导致 AppImage 打包后出现 EACCES 错误
+4. **AppImage FUSE 隔离修复**：AppImage 通过 FUSE 挂载，root 用户无法访问挂载点内文件。执行 `db_hook`（需 sudo）前会先将 `xkey_helper_linux` 复制到 `/tmp/`
+
+## 面向开发者
+
+如果你想从源码构建或为项目贡献代码，请遵循以下步骤：
 
 ```bash
-# 1. 克隆项目
-git clone https://github.com/yourusername/fork-WeChatMsg.git
+# 1. 克隆项目到本地
+git clone https://github.com/hicccc77/WeFlow.git
+cd WeFlow
 
-# 2. 安装依赖
-pip install -r requirements.txt
+# 2. 安装项目依赖
+npm install
 
-# 3. 运行图形界面
-python main.py
-
-# 4. 运行命令行工具
-python main_cli.py --help
+# 3. 运行应用（开发模式）
+npm run dev
 ```
 
-## 🛠️ 技术栈
+## 致谢
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Python | 3.8+ | 编程语言 |
-| PyQt5 | 5.x | GUI框架 |
-| SQLite | - | 数据库 |
-|jieba| - | 中文分词 |
-| WordCloud | - | 词云生成 |
-| Matplotlib | - | 数据可视化 |
-| Pandas | - | 数据分析 |
+- [密语 CipherTalk](https://github.com/ILoveBingLu/miyu) 为本项目提供了基础框架
+- [WeChat-Channels-Video-File-Decryption](https://github.com/Evil0ctal/WeChat-Channels-Video-File-Decryption) 提供了视频解密相关的技术参考
 
-## 📁 项目结构
+## 推广与合作
 
-```
-fork-WeChatMsg/
-├── app/
-│   ├── ui/                    # 图形界面
-│   │   ├── main_window.py
-│   │   ├── chat_window.py
-│   │   └── analysis_window.py
-│   ├── analysis/              # 数据分析
-│   │   ├── wordcloud.py      # 词云分析
-│   │   ├── chat_analysis.py  # 聊天分析
-│   │   └── user_analysis.py  # 用户分析
-│   ├── export/                # 数据导出
-│   │   ├── html_export.py
-│   │   ├── csv_export.py
-│   │   └── pdf_export.py
-│   ├── decrypt/               # 数据解密
-│   │   ├── get_key.py        # 获取密钥
-│   │   └── decrypt_db.py     # 解密数据库
-│   └── util/                  # 工具函数
-│       ├── database.py
-│       └── parser.py
-├── resource/                  # 资源文件
-├── tests/                     # 测试代码
-├── main.py                    # 图形界面入口
-├── main_cli.py                # 命令行入口
-└── requirements.txt           # 依赖配置
-```
+如果您对 **WeFlow** 有兴趣，或者希望与我们展开深度合作或投放你的广告，欢迎随时通过邮件取得联系。我们非常期待与各位创作者、开发者及合作伙伴共同探索。
 
-## 💡 核心示例
+### 联系方式
 
-### 数据库解密
+欢迎发送邮件至：
 
-```python
-import hashlib
+<a href="mailto:yccccccy@proton.me"><img src="https://img.shields.io/badge/Email-yccccccy%40proton.me-60A5FA?style=flat-square&logo=proton&logoColor=white&labelColor=2A3B4C" alt="Protonmail" height="24px"></a>
 
-class WeChatDecryptor:
-    """微信数据库解密器"""
-    
-    def __init__(self):
-        self.key = None
-    
-    def get_wechat_key(self):
-        """获取微信数据库密钥"""
-        # 从微信进程内存中提取密钥
-        # 具体实现涉及内存读取和解析
-        pass
-    
-    def decrypt_database(self, db_path: str, output_path: str):
-        """解密微信数据库"""
-        # 使用获取的密钥解密数据库
-        import pysqlcipher3.dbapi2 as sqlite
-        
-        conn = sqlite.connect(db_path)
-        cursor = conn.cursor()
-        
-        # 设置密钥
-        cursor.execute(f"PRAGMA key = 'x\'{self.key}\''")
-        
-        # 导出解密后的数据库
-        cursor.execute("ATTACH DATABASE '{}' AS plaintext KEY ''".format(output_path))
-        cursor.execute("SELECT sqlcipher_export('plaintext')")
-        
-        conn.close()
-```
+## 合作伙伴
 
-### 消息解析
+我们非常欢迎优秀的开源社区项目团队或其他团队与我们建立长期合作关系。期待与 WeFlow 携手并进，共同建设更开放的生态！
 
-```python
-from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Optional
-
-@dataclass
-class WeChatMessage:
-    """微信消息数据结构"""
-    msg_id: int
-    talker: str                    # 聊天对象
-    sender: str                    # 发送者
-    content: str                   # 消息内容
-    msg_type: int                  # 消息类型
-    create_time: datetime          # 创建时间
-    media_path: Optional[str]      # 媒体路径
-    
-class MessageParser:
-    """消息解析器"""
-    
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-    
-    def parse_messages(self, talker: str) -> List[WeChatMessage]:
-        """解析指定聊天对象的所有消息"""
-        import sqlite3
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # 查询消息记录
-        cursor.execute(
-            """SELECT msgId, talker, sender, content, type, createTime, mediaPath
-               FROM MSG WHERE talker = ?
-               ORDER BY createTime ASC""",
-            (talker,)
-        )
-        
-        messages = []
-        for row in cursor.fetchall():
-            message = WeChatMessage(
-                msg_id=row[0],
-                talker=row[1],
-                sender=row[2],
-                content=row[3],
-                msg_type=row[4],
-                create_time=datetime.fromtimestamp(row[5]),
-                media_path=row[6]
-            )
-            messages.append(message)
-        
-        conn.close()
-        return messages
-    
-    def parse_contacts(self) -> List[dict]:
-        """解析联系人列表"""
-        import sqlite3
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM Contact")
-        
-        contacts = []
-        for row in cursor.fetchall():
-            contact = {
-                'username': row[0],
-                'alias': row[1],
-                'nickname': row[2],
-                'remark': row[3]
-            }
-            contacts.append(contact)
-        
-        conn.close()
-        return contacts
-```
-
-### 数据分析
-
-```python
-from wordcloud import WordCloud
-import jieba
-from collections import Counter
-
-class ChatAnalyzer:
-    """聊天数据分析器"""
-    
-    def __init__(self, messages: List[WeChatMessage]):
-        self.messages = messages
-    
-    def generate_wordcloud(self, output_path: str):
-        """生成词云"""
-        # 合并所有消息内容
-        text = ' '.join([msg.content for msg in self.messages])
-        
-        # 中文分词
-        words = jieba.cut(text)
-        word_list = ' '.join(words)
-        
-        # 生成词云
-        wordcloud = WordCloud(
-            font_path='simhei.ttf',
-            width=800,
-            height=600,
-            background_color='white'
-        ).generate(word_list)
-        
-        # 保存词云图片
-        wordcloud.to_file(output_path)
-    
-    def analyze_by_time(self) -> dict:
-        """按时间分析聊天频率"""
-        time_stats = {}
-        
-        for msg in self.messages:
-            hour = msg.create_time.hour
-            time_stats[hour] = time_stats.get(hour, 0) + 1
-        
-        return time_stats
-    
-    def analyze_by_user(self) -> dict:
-        """按用户分析消息数量"""
-        user_stats = {}
-        
-        for msg in self.messages:
-            user_stats[msg.sender] = user_stats.get(msg.sender, 0) + 1
-        
-        return user_stats
-    
-    def get_most_common_words(self, top_n: int = 20) -> List[tuple]:
-        """获取最常用的词汇"""
-        # 合并所有消息内容
-        text = ' '.join([msg.content for msg in self.messages])
-        
-        # 中文分词
-        words = jieba.cut(text)
-        
-        # 过滤停用词
-        with open('stopwords.txt', 'r', encoding='utf-8') as f:
-            stopwords = set(f.read().splitlines())
-        
-        filtered_words = [word for word in words 
-                         if word not in stopwords and len(word) > 1]
-        
-        # 统计词频
-        word_counts = Counter(filtered_words)
-        
-        return word_counts.most_common(top_n)
-```
-
-### 数据导出
-
-```python
-import pandas as pd
-from datetime import datetime
-
-class DataExporter:
-    """数据导出器"""
-    
-    def export_to_html(self, messages: List[WeChatMessage], output_path: str):
-        """导出为HTML格式"""
-        html_template = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>微信聊天记录</title>
-            <style>
-                .message {{
-                    margin: 10px 0;
-                    padding: 10px;
-                    border-radius: 5px;
-                }}
-                .sent {{
-                    background-color: #95EC69;
-                    text-align: right;
-                }}
-                .received {{
-                    background-color: #FFFFFF;
-                    text-align: left;
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>微信聊天记录导出</h1>
-            <div class="chat-container">
-                {messages}
-            </div>
-        </body>
-        </html>
-        """
-        
-        messages_html = ""
-        for msg in messages:
-            msg_class = "sent" if msg.sender == "self" else "received"
-            messages_html += f"""
-                <div class="message {msg_class}">
-                    <div class="time">{msg.create_time.strftime('%Y-%m-%d %H:%M:%S')}</div>
-                    <div class="content">{msg.content}</div>
-                </div>
-            """
-        
-        html_content = html_template.format(messages=messages_html)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-    
-    def export_to_csv(self, messages: List[WeChatMessage], output_path: str):
-        """导出为CSV格式"""
-        data = []
-        
-        for msg in messages:
-            data.append({
-                '消息ID': msg.msg_id,
-                '聊天对象': msg.talker,
-                '发送者': msg.sender,
-                '消息内容': msg.content,
-                '消息类型': msg.msg_type,
-                '创建时间': msg.create_time.strftime('%Y-%m-%d %H:%M:%S'),
-                '媒体路径': msg.media_path
-            })
-        
-        df = pd.DataFrame(data)
-        df.to_csv(output_path, index=False, encoding='utf-8-sig')
-    
-    def export_to_pdf(self, messages: List[WeChatMessage], output_path: str):
-        """导出为PDF格式"""
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        
-        # 注册中文字体
-        pdfmetrics.registerFont(TTFont('SimHei', 'simhei.ttf'))
-        
-        c = canvas.Canvas(output_path, pagesize=A4)
-        c.setFont('SimHei', 12)
-        
-        y_position = 750
-        
-        for msg in messages:
-            # 检查是否需要换页
-            if y_position < 50:
-                c.showPage()
-                c.setFont('SimHei', 12)
-                y_position = 750
-            
-            # 绘制消息
-            text = f"{msg.create_time.strftime('%Y-%m-%d %H:%M:%S')} - {msg.sender}: {msg.content}"
-            c.drawString(50, y_position, text[:50])  # 限制每行长度
-            
-            y_position -= 20
-        
-        c.save()
-```
-
-### 图形界面
-
-```python
-from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtCore import Qt
-
-class MainWindow(QMainWindow):
-    """主窗口"""
-    
-    def __init__(self):
-        super().__init__()
-        
-        self.setWindowTitle("微信消息导出工具")
-        self.setGeometry(100, 100, 800, 600)
-        
-        # 初始化界面
-        self.init_ui()
-    
-    def init_ui(self):
-        """初始化界面组件"""
-        # 创建菜单栏
-        menubar = self.menuBar()
-        
-        # 文件菜单
-        file_menu = menubar.addMenu('文件')
-        
-        import_action = QAction('导入数据库', self)
-        import_action.triggered.connect(self.import_database)
-        file_menu.addAction(import_action)
-        
-        export_action = QAction('导出数据', self)
-        export_action.triggered.connect(self.export_data)
-        file_menu.addAction(export_action)
-        
-        # 创建工具栏
-        toolbar = self.addToolBar('工具')
-        
-        # 添加按钮
-        decrypt_btn = QPushButton('解密数据库')
-        decrypt_btn.clicked.connect(self.decrypt_database)
-        toolbar.addWidget(decrypt_btn)
-        
-        analyze_btn = QPushButton('数据分析')
-        analyze_btn.clicked.connect(self.analyze_data)
-        toolbar.addWidget(analyze_btn)
-    
-    def import_database(self):
-        """导入数据库"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, '选择数据库文件', '', 'Database Files (*.db)'
-        )
-        
-        if file_path:
-            # 处理数据库导入
-            pass
-    
-    def export_data(self):
-        """导出数据"""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, '保存文件', '', 'HTML Files (*.html);;CSV Files (*.csv)'
-        )
-        
-        if file_path:
-            # 处理数据导出
-            pass
-    
-    def decrypt_database(self):
-        """解密数据库"""
-        # 调用解密模块
-        pass
-    
-    def analyze_data(self):
-        """数据分析"""
-        # 调用分析模块
-        pass
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
-```
-
-## 📊 功能截图
-
-### 主界面
-
-![主界面](./screenshots/main_window.png)
-
-### 聊天记录
-
-![聊天记录](./screenshots/chat_history.png)
-
-### 数据分析
-
-![数据分析](./screenshots/analysis.png)
-
-## 🎯 核心特性
-
-- **数据解密**: 自动获取密钥并解密微信数据库
-- **多格式导出**: 支持HTML/CSV/PDF等多种格式
-- **数据分析**: 词云、聊天频率、用户分析等
-- **图形界面**: 友好的PyQt5图形界面
-- **命令行**: 支持命令行批量操作
-- **媒体导出**: 支持图片、视频、语音导出
-
-## 📝 更新日志
-
-### v1.0.0 (2024-01-01)
-- ✨ 初始版本发布
-- ✨ 完成数据库解密功能
-- ✨ 完成消息解析功能
-- ✨ 完成数据导出功能
-- ✨ 完成数据分析功能
-- ✨ 完成图形界面
-
-## 👥 贡献指南
-
-欢迎贡献代码!请遵循以下步骤:
-
-1. Fork本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交Pull Request
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
-
-## 📮 联系方式
-
-项目维护者: JOSP Team
+<p align="center">
+  <!-- 是的你没看错这里还是占位！
+  <a href="https://your-partner-website.com" target="_blank">
+    <img src="https://via.placeholder.com/150x50?text=Partner+1+Logo" alt="Partner Name" width="150" style="margin: 10px; vertical-align: middle;" />
+  </a> -->
+</p>
 
 ---
 
-⭐ 如果这个项目对你有帮助,欢迎Star支持!
+## 贡献者
+
+感谢所有做出贡献的开发者！
+
+<p align="center">
+  <a href="https://github.com/hicccc77/WeFlow/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=hicccc77/WeFlow" alt="Contributors" />
+  </a>
+</p>
+
+## Star History
+
+<a href="https://www.star-history.com/#hicccc77/WeFlow&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hicccc77/WeFlow&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hicccc77/WeFlow&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hicccc77/WeFlow&type=date&legend=top-left" />
+  </picture>
+</a>
+
+<div align="center">
+
+---
+
+**请负责任地使用本工具，遵守相关法律法规**
+
+</div>
