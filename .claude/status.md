@@ -171,13 +171,20 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 
 **修复**：`updateMediaCardState` 移到 `setSelectedKeys` 外面，在事件处理器上下文调用（非 render 阶段）。1 行改动。
 
-### 7C：ResourcesPage 资源浏览数据异常 ❌
+### 7C：ResourcesPage 资源浏览数据异常 ✅（2026-07-30 修复）
 
-| 现象 | 猜测根因 | 状态 |
-|------|----------|------|
-| 同一联系人图片重复 4 份 | WCDB `getMediaStream` 返回重复行（多个 message_N.db 表 JOIN 产生） | 未定位 |
-| 无预览缩略图 | 图片文件不在本地磁盘（DAT 解密失败 / 文件被清理） | 未定位 |
-| 点击提示 "未找到本地数据" | `image.decrypt` 返回 `!success`，`resolveCache` 无 `localPath` | 可能非 bug — 媒体文件确实不在当前机器 |
+**根因链**（优先级从表层到深层）：
+
+| # | 问题 | 根因 | 修复 | 状态 |
+|---|------|------|------|------|
+| 1 | 点击图片 "未找到本地数据" | `decryptOne` / `batchDecryptImage` 传入 `hardlinkOnly: true` → `resolveDatPath:780` 阻断文件系统 DAT 扫描 | `hardlinkOnly: true` → `false` | ✅ |
+| 2 | RangeError 栈溢出（隐式） | `nativeImageDecrypt.ts` 局部函数 `resolveWorkerPath()` 遮蔽导入 → 无限递归调用自身 | 导入改别名 `resolveWorker`，局部函数改名 `getDecryptWorkerPath` | ✅ |
+| 3 | 原生解密 "join is not defined" | 阶段 7A 误删 `import { join } from 'path'` 和 `import { existsSync } from 'fs'`（`getAddonCandidates`/`loadAddon` 实际在用） | 恢复两个 import | ✅ |
+| 4 | JS 解密 fallback 对 v2 DAT 无 AES key 时跳过 | `tryDecryptDatWithJs`: `datVersion===2` 且 `aesKeyText.length<16` → 两个候选分支全跳过 → 返回 null | 追加 v2 无 AES key 时的 XOR-only 回退 | ✅ |
+| 5 | "解密失败"（部分图片） | 注入密钥不覆盖所有加密参数变体 | 预期行为，不可修 | — |
+| 6 | 同一联系人图片重复 4 份 → 3 份 | `getSessionRows()` 无 sessionId 去重（1 份重复）+ 原生 `wcdb_scan_media_stream` 跨 4 分片返回（3 份残留） | sessionId 去重（部分缓解） | ⚠️ |
+| 7 | 批量解密按钮不可用 | MediaCard 无可见选中控件 → 用户不知道点击 card-meta 可选中 | 加 `floating-check` 复选框 + 全选/取消全选按钮 | ✅ |
+| 8 | 无预览缩略图（部分恢复） | 首屏预览仍走 `hardlinkOnly: true`，但用户点击解密后写入缓存 → 后续渲染可命中 | 间接修复 | ✅ |
 
 > 统计数字（资源数量、最后时间）正常显示。可能是 WeFlow 原有 bug，非本次修改引入。
 
