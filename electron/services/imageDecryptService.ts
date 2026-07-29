@@ -1994,6 +1994,10 @@ export class ImageDecryptService {
       if (datVersion !== 2) {
         candidates.push(this.decryptDatV3WithJs(encrypted, xorKey))
       }
+      // v2 DAT without AES key → still try XOR-only decrypt as last resort
+      if (datVersion === 2 && aesKeyText.length < 16) {
+        candidates.push(this.decryptDatV3WithJs(encrypted, xorKey))
+      }
 
       for (const candidate of candidates) {
         const ext = this.detectImageExtension(candidate)

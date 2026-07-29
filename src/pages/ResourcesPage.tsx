@@ -1,5 +1,5 @@
 import { forwardRef, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type HTMLAttributes, type MutableRefObject } from 'react'
-import { Calendar, Image as ImageIcon, Info, Loader2, PlayCircle, RefreshCw, Trash2, UserRound } from 'lucide-react'
+import { Calendar, CheckSquare, Image as ImageIcon, Info, Loader2, PlayCircle, RefreshCw, Square, Trash2, UserRound } from 'lucide-react'
 import { VirtuosoGrid } from 'react-virtuoso'
 import { finishBackgroundTask, registerBackgroundTask, updateBackgroundTask } from '../services/backgroundTaskMonitor'
 import {
@@ -521,6 +521,14 @@ const MediaCard = memo(function MediaCard({
 
   return (
     <article className={`media-card ${selected ? 'selected' : ''} ${isDecryptingVisual ? 'decrypting' : ''}`}>
+      <button
+        type="button"
+        className={`floating-check ${selected ? 'checked' : ''}`}
+        onClick={(event) => { event.stopPropagation(); onToggleSelect(item) }}
+        aria-label={selected ? '取消选中' : '选中'}
+      >
+        {selected ? <CheckSquare size={16} /> : <Square size={16} />}
+      </button>
       <button type="button" className="floating-info" onClick={() => onShowInfo(item)} aria-label="查看资源信息">
         <Info size={14} />
       </button>
@@ -2232,6 +2240,27 @@ function ResourcesPage() {
     updateMediaCardState(key, { selected: !wasSelected })
   }, [getMeta, updateMediaCardState])
 
+  const selectAll = useCallback(() => {
+    const imageItems = items.filter(item => item.mediaType === 'image')
+    if (imageItems.length === 0) return
+    const next = new Set<string>()
+    for (const item of imageItems) {
+      const key = getMeta(item).itemKey
+      next.add(key)
+      updateMediaCardState(key, { selected: true })
+    }
+    selectedKeysRef.current = next
+    setSelectedKeys(next)
+  }, [getMeta, items, updateMediaCardState])
+
+  const deselectAll = useCallback(() => {
+    for (const key of selectedKeysRef.current) {
+      updateMediaCardState(key, { selected: false })
+    }
+    selectedKeysRef.current = new Set()
+    setSelectedKeys(new Set())
+  }, [updateMediaCardState])
+
   const onImageLoaded = useCallback((item: MediaStreamItem, width: number, height: number) => {
     if (item.mediaType !== 'image') return
     if (!width || !height) return
@@ -2340,7 +2369,7 @@ function ResourcesPage() {
         createTime: Number(item.createTime || 0) || undefined,
         force: true,
         preferFilePath: true,
-        hardlinkOnly: true,
+        hardlinkOnly: false,
         allowCacheIndex: options?.allowCacheIndex ?? true,
         suppressEvents: true
       })
@@ -2548,7 +2577,7 @@ function ResourcesPage() {
               createTime: Number(item.createTime || 0) || undefined,
               force: true,
               preferFilePath: true,
-              hardlinkOnly: true,
+              hardlinkOnly: false,
               allowCacheIndex: true,
               suppressEvents: true
             })
@@ -2740,6 +2769,12 @@ function ResourcesPage() {
           <button type="button" onClick={() => void loadStream(true)} disabled={loading || loadingMore}>
             {loading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
             刷新
+          </button>
+          <button type="button" onClick={selectAll} disabled={items.length === 0}>
+            全选
+          </button>
+          <button type="button" onClick={deselectAll} disabled={selectedKeys.size === 0}>
+            取消全选
           </button>
           {tab === 'image' && (
             <button type="button" onClick={() => void batchDecryptImage()} disabled={selectedKeys.size === 0 || batchBusy}>

@@ -2736,6 +2736,7 @@ export class WcdbCore {
           return { success: false, error: sessionsRes.error || '读取会话失败' }
         }
 
+        const seen = new Set<string>()
         const rows = (sessionsRes.sessions || [])
           .map((row: any) => ({
             sessionId: String(
@@ -2756,7 +2757,11 @@ export class WcdbCore {
               0
             )
           }))
-          .filter((row) => Boolean(row.sessionId))
+          .filter((row) => {
+            if (!row.sessionId || seen.has(row.sessionId)) return false
+            seen.add(row.sessionId)
+            return true
+          })
           .sort((a, b) => b.sortTimestamp - a.sortTimestamp)
 
         this.mediaStreamSessionCache = rows

@@ -1,5 +1,7 @@
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { Worker } from 'worker_threads'
-import { resolveWorkerPath } from '../utils/resolveWorkerPath'
+import { resolveWorkerPath as resolveWorker } from '../utils/resolveWorkerPath'
 
 type NativeDecryptResult = {
   data: Buffer
@@ -166,8 +168,8 @@ let workerFailedPermanently = false
 let workerJobSeq = 0
 const pendingJobs = new Map<number, PendingJob>()
 
-function resolveWorkerPath(): string {
-  return resolveWorkerPath('imageDecryptWorker.js')
+function getDecryptWorkerPath(): string {
+  return resolveWorker('imageDecryptWorker.js')
 }
 
 function flushPendingJobs(): void {
@@ -179,7 +181,7 @@ function ensureDecryptWorker(): Worker | null {
   if (workerFailedPermanently) return null
   if (decryptWorker) return decryptWorker
 
-  const workerPath = resolveWorkerPath()
+  const workerPath = getDecryptWorkerPath()
   if (!workerPath) {
     workerFailedPermanently = true
     return null
