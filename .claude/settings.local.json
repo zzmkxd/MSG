@@ -50,7 +50,8 @@
       "Bash(taskkill /F /IM electron.exe)",
       "Bash(taskkill /F /IM node.exe)",
       "Skill(neat-freak)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "PowerShell(npm run *)"
     ]
   }
 }

@@ -18,7 +18,20 @@ Windows 微信消息浏览/导出工具。以 WeFlow 为骨架，Electron + Type
 - `.claude/dependency-audit.md` — 依赖许可证/Windows 兼容/原生模块审计（2026-07-09）
 
 ## 当前状态
-**阶段 0-6 全部完成。** 应用正常运行：引导 → 密钥 → DB → 会话列表 → 消息浏览全链路通过。GW/WM 补充功能 TS 移植完成（词频服务 + DOCX 导出 + CSS/JS 静态资源）。2026-07-29。
+**阶段 0-6 全部完成，阶段 7 部分完成。** 
+
+**Dev 模式（`npm run dev`）：全链路正常。** 引导 → 密钥 → DB → 会话列表 → 消息浏览 → 统计 → 联系人 → SNS 均可运行。
+**打包模式（`npm run build`）：启动 -2302，Worker 启动正常但 koffi 加载 WCDB DLL 失败。**
+
+**已知 bug：**
+- 资源浏览：图片重复 4 份 + 无缩略图 + "未找到本地数据"（WeFlow 原有，非本次引入）
+- 打包 -2302：`getDllPath()` 在 packaged 环境 DLL 路径解析待修复
+
+**2026-07-29 阶段 7 修复：**
+- ✅ Worker ASAR 解包（-1006 → -2302）：`resolveWorkerPath.ts` + `asarUnpack` 配置（8 处 call site 重构）
+- ✅ ResourcesPage 栈溢出：`toggleSelect` setState-in-render 反模式修复
+
+GW/WM 补充功能 TS 移植完成（词频服务 + DOCX 导出 + CSS/JS 静态资源）。2026-07-29。
 
 **已修复的阻塞**：
 - WCDB `wcdb_init() = -1006`：需要 Electron (Node 24.x) 运行时，tsx (Node 22.x) 不兼容

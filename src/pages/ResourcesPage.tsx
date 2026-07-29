@@ -2219,14 +2219,17 @@ function ResourcesPage() {
 
   const toggleSelect = useCallback((item: MediaStreamItem) => {
     const key = getMeta(item).itemKey
+    const wasSelected = selectedKeysRef.current.has(key)
     setSelectedKeys((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       selectedKeysRef.current = next
-      updateMediaCardState(key, { selected: next.has(key) })
       return next
     })
+    // MUST be outside the setState updater — updateMediaCardState triggers
+    // React useSyncExternalStore listeners, which cannot fire during render.
+    updateMediaCardState(key, { selected: !wasSelected })
   }, [getMeta, updateMediaCardState])
 
   const onImageLoaded = useCallback((item: MediaStreamItem, width: number, height: number) => {

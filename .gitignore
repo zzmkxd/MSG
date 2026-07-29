@@ -22,6 +22,9 @@ test*.DS_Store
 node_modules
 dist-electron
 
+# 构建产物（安装包）
+release/
+
 # E2E 测试输出（含本地路径，不入库）
 .claude/e2e-key.json
 .claude/e2e-wcdb-electron-result.json

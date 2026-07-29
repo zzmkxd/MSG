@@ -1,6 +1,7 @@
 import './preload-env'
 import { app, BrowserWindow, ipcMain, nativeTheme, session, Tray, Menu, nativeImage } from 'electron'
 import { Worker } from 'worker_threads'
+import { resolveWorkerPath } from './utils/resolveWorkerPath'
 import { randomUUID } from 'crypto'
 import { join, dirname } from 'path'
 import { autoUpdater } from 'electron-updater'
@@ -3614,7 +3615,7 @@ function registerIpcHandlers() {
     const userDataPath = app.getPath('userData')
     const cachePath = String(cfg.get('cachePath') || '').trim()
     const emojiCacheDir = cachePath ? join(cachePath, 'Emojis') : join(app.getPath('documents'), 'WeFlow', 'Emojis')
-    const workerPath = join(__dirname, 'exportWorker.js')
+    const workerPath = resolveWorkerPath('exportWorker.js')
 
     const runWorker = async () => {
       return await new Promise<any>((resolve, reject) => {
@@ -3754,7 +3755,7 @@ function registerIpcHandlers() {
     const singleAccountDir = cfg.getAccountDir(singleDbPath, String(cfg.get('myWxid') || '').trim()) || undefined
     const singleCachePath = String(cfg.get('cachePath') || '').trim()
     const singleEmojiCacheDir = singleCachePath ? join(singleCachePath, 'Emojis') : join(app.getPath('documents'), 'WeFlow', 'Emojis')
-    const workerPath = join(__dirname, 'exportWorker.js')
+    const workerPath = resolveWorkerPath('exportWorker.js')
 
     try {
       return await new Promise<any>((resolve) => {
@@ -3828,7 +3829,7 @@ function registerIpcHandlers() {
   ipcMain.handle('export:exportContacts', async (_, outputDir: string, options: any) => {
     const cfg = configService || new ConfigService()
     configService = cfg
-    const workerPath = join(__dirname, 'exportWorker.js')
+    const workerPath = resolveWorkerPath('exportWorker.js')
 
     try {
       return await new Promise<any>((resolve) => {
@@ -4282,7 +4283,7 @@ function registerIpcHandlers() {
       : join(app.getAppPath(), 'resources')
     const userDataPath = app.getPath('userData')
 
-    const workerPath = join(__dirname, 'annualReportWorker.js')
+    const workerPath = resolveWorkerPath('annualReportWorker.js')
 
     return await new Promise((resolve) => {
       const worker = new Worker(workerPath, {
@@ -4350,7 +4351,7 @@ function registerIpcHandlers() {
       : join(app.getAppPath(), 'resources')
     const userDataPath = app.getPath('userData')
 
-    const workerPath = join(__dirname, 'dualReportWorker.js')
+    const workerPath = resolveWorkerPath('dualReportWorker.js')
 
     return await new Promise((resolve) => {
       const worker = new Worker(workerPath, {

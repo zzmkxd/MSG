@@ -1,6 +1,5 @@
 import { Worker } from 'worker_threads'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { resolveWorkerPath } from '../utils/resolveWorkerPath'
 import type { Message } from './chatService'
 
 /**
@@ -32,11 +31,7 @@ export class ApiMessageMapperPool {
   }
 
   private resolveWorkerPath(): string {
-    const isDev = process.env.NODE_ENV === 'development'
-    const devPath = join(__dirname, '../dist-electron/apiMessageWorker.js')
-    const prodPath = join(__dirname, 'apiMessageWorker.js')
-    if (isDev && existsSync(devPath)) return devPath
-    return prodPath
+    return resolveWorkerPath('apiMessageWorker.js')
   }
 
   /** 拉起线程池（幂等）。worker 全部退出后会自动允许下次重新拉起。 */

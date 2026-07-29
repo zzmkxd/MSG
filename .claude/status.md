@@ -148,6 +148,48 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 | `webSecurity: false` ×4 替代方案 | plan.md §3.6 | 待评估 |
 | 账号 1 (l63apc) 返回 -3 | 阶段 5 | 可选，可能仅因未登录 |
 
+## 阶段 7：打包修复 + 运行时 bug（2026-07-29）
+
+### 7A：打包后 WCDB 启动失败
+
+| 阶段 | 错误码 | 根因 | 修复 | 状态 |
+|------|--------|------|------|------|
+| 第一版打包 | -1006 | Worker 文件被打进 `app.asar`，Node.js `new Worker()` 无法从 ASAR 加载 | 创建 `electron/utils/resolveWorkerPath.ts`，8 处 `new Worker()` 统一用 ASAR→unpacked 路径映射；`package.json` `asarUnpack` 新增 `dist-electron/*Worker.js` | ✅ |
+| 第二版打包 | -2302 | koffi 加载 DLL 异常（`wcdb_api.dll` 路径在 packaged 环境解析失败） | 待排查 `getDllPath()` 的 `process.resourcesPath` 路径组合 | ❌ |
+
+**影响文件：**
+- `electron/utils/resolveWorkerPath.ts` — 新建，ASAR→unpacked 路径映射
+- `electron/services/wcdbService.ts` — `join(__dirname,...)` → `resolveWorkerPath()`
+- `electron/services/apiMessageMapperPool.ts` — 同上
+- `electron/services/nativeImageDecrypt.ts` — 同上，去 dead imports
+- `electron/main.ts` — 5 处 `join(__dirname,...)` → `resolveWorkerPath()`
+- `package.json` — `asarUnpack` 新增 `dist-electron/*Worker.js`
+
+### 7B：ResourcesPage setState-in-render 栈溢出 ✅
+
+**根因**：`ResourcesPage.tsx:2227` — `toggleSelect` 在 `setSelectedKeys` 函数式 updater **内部**调用 `updateMediaCardState` → `notify()` → `useSyncExternalStore` listener。React 检测到跨组件 render 阶段 setState → `Cannot update a component while rendering` → 级联重渲染 → `RangeError: Maximum call stack size exceeded`。
+
+**修复**：`updateMediaCardState` 移到 `setSelectedKeys` 外面，在事件处理器上下文调用（非 render 阶段）。1 行改动。
+
+### 7C：ResourcesPage 资源浏览数据异常 ❌
+
+| 现象 | 猜测根因 | 状态 |
+|------|----------|------|
+| 同一联系人图片重复 4 份 | WCDB `getMediaStream` 返回重复行（多个 message_N.db 表 JOIN 产生） | 未定位 |
+| 无预览缩略图 | 图片文件不在本地磁盘（DAT 解密失败 / 文件被清理） | 未定位 |
+| 点击提示 "未找到本地数据" | `image.decrypt` 返回 `!success`，`resolveCache` 无 `localPath` | 可能非 bug — 媒体文件确实不在当前机器 |
+
+> 统计数字（资源数量、最后时间）正常显示。可能是 WeFlow 原有 bug，非本次修改引入。
+
+### 7D：已确认正常运行的功能
+
+- 引导流程（协议 → 账号配置 → 密钥 → DB → 主界面）
+- 会话列表 → 消息浏览
+- 统计栏目（数字获取正常）
+- 联系人列表
+- ECharts 图表渲染
+- SNS 朋友圈（CDN 过期链接受限是预期行为）
+
 ## 核实过的关键事实
 
 | 声明 | 核实结果 |

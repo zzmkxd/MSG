@@ -1,6 +1,5 @@
 import { Worker } from 'worker_threads'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { resolveWorkerPath } from '../utils/resolveWorkerPath'
 
 /**
  * Worker 消息接口
@@ -33,18 +32,10 @@ export class WcdbService {
   private initWorker() {
     if (this.worker) return
 
-    const isDev = process.env.NODE_ENV === 'development'
-    const workerPath = isDev
-      ? join(__dirname, '../dist-electron/wcdbWorker.js')
-      : join(__dirname, 'wcdbWorker.js')
-
-    let finalPath = workerPath
-    if (isDev && !existsSync(finalPath)) {
-      finalPath = join(__dirname, 'wcdbWorker.js')
-    }
+    const workerPath = resolveWorkerPath('wcdbWorker.js')
 
     try {
-      this.worker = new Worker(finalPath)
+      this.worker = new Worker(workerPath)
 
       this.worker.on('message', (msg: any) => {
         const { id, result, error, type, payload } = msg

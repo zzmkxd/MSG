@@ -1,6 +1,5 @@
-import { existsSync } from 'fs'
-import { join } from 'path'
 import { Worker } from 'worker_threads'
+import { resolveWorkerPath } from '../utils/resolveWorkerPath'
 
 type NativeDecryptResult = {
   data: Buffer
@@ -167,15 +166,8 @@ let workerFailedPermanently = false
 let workerJobSeq = 0
 const pendingJobs = new Map<number, PendingJob>()
 
-function resolveWorkerPath(): string | null {
-  const isDev = process.env.NODE_ENV === 'development'
-  const candidates = isDev
-    ? [join(__dirname, '../dist-electron/imageDecryptWorker.js'), join(__dirname, 'imageDecryptWorker.js')]
-    : [join(__dirname, 'imageDecryptWorker.js')]
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate
-  }
-  return null
+function resolveWorkerPath(): string {
+  return resolveWorkerPath('imageDecryptWorker.js')
 }
 
 function flushPendingJobs(): void {

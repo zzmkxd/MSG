@@ -177,7 +177,8 @@
       "node_modules/sherpa-onnx-*/**/*",
       "node_modules/ffmpeg-static/**/*",
       "node_modules/@hicccc77/electron-liquid-glass/**/*",
-      "resources/wedecrypt/**/*.node"
+      "resources/wedecrypt/**/*.node",
+      "dist-electron/*Worker.js"
     ]
   }
 }
