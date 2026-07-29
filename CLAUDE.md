@@ -18,18 +18,22 @@ Windows 微信消息浏览/导出工具。以 WeFlow 为骨架，Electron + Type
 - `.claude/dependency-audit.md` — 依赖许可证/Windows 兼容/原生模块审计（2026-07-09）
 
 ## 当前状态
-**阶段 0-6 全部完成，阶段 7 部分完成。** 
+**阶段 0-7 全部完成。Dev + 打包均正常运行。**
 
-**Dev 模式（`npm run dev`）：全链路正常。** 引导 → 密钥 → DB → 会话列表 → 消息浏览 → 统计 → 联系人 → SNS 均可运行。
-**打包模式（`npm run build`）：启动 -2302，Worker 启动正常但 koffi 加载 WCDB DLL 失败。**
+**Dev 模式（`npm run dev`）：全链路正常。**
+**打包模式（`npm run build`）：WCDB 许可校验通过（EXE 改名 electron.exe）。**
 
-**已知 bug：**
-- 资源浏览：图片重复 4 份 + 无缩略图 + "未找到本地数据"（WeFlow 原有，非本次引入）
-- 打包 -2302：`getDllPath()` 在 packaged 环境 DLL 路径解析待修复
+### 2026-07-30 阶段 7 完成：打包修复 + 资源浏览全线修复
 
-**2026-07-29 阶段 7 修复：**
-- ✅ Worker ASAR 解包（-1006 → -2302）：`resolveWorkerPath.ts` + `asarUnpack` 配置（8 处 call site 重构）
-- ✅ ResourcesPage 栈溢出：`toggleSelect` setState-in-render 反模式修复
+**打包 -1006 根因**：WCDB SDK `wcdb_init()` 内部调用 `GetModuleFileName(NULL)` 检查宿主 EXE 名，仅允许 `electron.exe`。修复：`package.json` `executableName: "electron"`。
+
+**诊断过程**（20+ 轮编-装-跑）：排除 PATH/CWD/Worker线程/子进程/环境变量等所有假设，最终通过主进程直调 + EXE 改名实验确认。
+
+**ResourcesPage**：解密链路（hardlinkOnly 阻断 + resolveWorkerPath 递归 + join 缺失）、批量操作 UI（复选框 + 全选）。
+
+**已知限制**：
+- 部分图片 "解密失败"：wx_key.dll 密钥注入不覆盖所有加密参数变体（非 bug，属 SDK 限制）
+- 资源浏览图片重复 3 份：WCDB 原生跨分片返回（前端已部分去重）
 
 GW/WM 补充功能 TS 移植完成（词频服务 + DOCX 导出 + CSS/JS 静态资源）。2026-07-29。
 

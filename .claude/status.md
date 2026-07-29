@@ -155,7 +155,7 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 | 阶段 | 错误码 | 根因 | 修复 | 状态 |
 |------|--------|------|------|------|
 | 第一版打包 | -1006 | Worker 文件被打进 `app.asar`，Node.js `new Worker()` 无法从 ASAR 加载 | 创建 `electron/utils/resolveWorkerPath.ts`，8 处 `new Worker()` 统一用 ASAR→unpacked 路径映射；`package.json` `asarUnpack` 新增 `dist-electron/*Worker.js` | ✅ |
-| 第二版打包 | -2302 | koffi 加载 DLL 异常（`wcdb_api.dll` 路径在 packaged 环境解析失败） | 待排查 `getDllPath()` 的 `process.resourcesPath` 路径组合 | ❌ |
+| 第二版打包 | -1006 | WCDB SDK 许可校验检查宿主 EXE 名，仅允许 `electron.exe` | `executableName: "electron"` | ✅ |
 
 **影响文件：**
 - `electron/utils/resolveWorkerPath.ts` — 新建，ASAR→unpacked 路径映射
