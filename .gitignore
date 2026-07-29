@@ -22,6 +22,10 @@ test*.DS_Store
 node_modules
 dist-electron
 
+# E2E 测试输出（含本地路径，不入库）
+.claude/e2e-key.json
+.claude/e2e-wcdb-electron-result.json
+
 # 只读参考项目，不纳入版本控制
 WeFlow_for_archlinux-main/
 WeChatMsg-master/

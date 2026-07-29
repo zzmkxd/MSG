@@ -115,21 +115,34 @@ msg/
 └── package.json
 ```
 
-### 3.3 需要 TS 移植的模块（非保留项）
+### 3.3 需要 TS 移植的模块（2026-07-11 修订）
 
-WF 已有的模块直接保留。以下是从零移植的：
+WF 已有的模块直接保留。经过逐文件核实和 WF 能力对齐，**原 7 项缩减为 3 项 + 1 项资源复用**。
 
-| 模块 | 来源 | 行数 | 难度 |
+#### 确认移植（真正的新功能）
+
+| 模块 | 来源 | 行数 | 难度 | 原因 |
+|------|------|------|------|------|
+| 词频统计（stats） | GW Python | 57 | 低 — jieba→jieba-wasm（已在 deps） | WF 无独立词频分析 |
+| DOCX 导出 | WM Python | 337 | 中 — → docx npm 包 | WF 9 种格式独缺 DOCX |
+| 补充消息解析器（红包/视频号/企业名片） | WM Python | 316 | 低 — SQL 查询翻译 | 补充 WF 17 种之外的类型 |
+
+#### 直接复用（无需移植代码）
+
+| 资源 | 来源 | 行数 | 方式 |
 |------|------|------|------|
-| 词频/词云（stats + visualizer） | GW Python | ~320 | 中 — jieba→nodejieba, matplotlib→ECharts |
-| 人格分析（personality 11维 + Claude prompt） | GW Python | 142 | 低 — TS SDK 等效，关键词词典直接复制 |
-| HTML 报告生成（9 个 section builder） | GW Python (jinja2) | 375 | 中 — → React 组件 |
-| DOCX 导出 | WM Python | — | 中 — → docx.js |
-| AI_TXT 导出 | WM Python | — | 低 — 纯文本 |
-| 3 种补充解析器（红包/视频号/企业名片） | WM Python | — | 低 |
-| GW CSS（OKLCH 474行）+ JS 热力图（162行） | GW | 636 | **直接复用** |
+| GW CSS（OKLCH 主题） + JS 热力图 | GW report.py 内嵌 | 636 | 提取为独立 .css/.js 文件 |
 
-> 业务逻辑新增 ~800 行 TS + ~700 行 React 组件。详见 `.claude/gw-audit.md`。
+#### 跳过的模块（WF 已有等价或更强的实现）
+
+| 模块 | 来源 | 行数 | 跳过原因 |
+|------|------|------|----------|
+| visualizer.py（7种图表） | GW Python | 262 | WF ECharts 已覆盖饼图/柱状/折线/热力图/词云 |
+| personality.py（11维人格） | GW Python | 141 | WF insightService（情感+意图+话题）+ insightProfileService（月度AI画像）更强 |
+| report.py（HTML 报告） | GW Python | 1,014 | WF AnnualReportWindow + HtmlFormatter 等价 |
+| exporter_ai_txt.py（AI 训练文本） | WM Python | 51 | WF ChatLab + ChatLab-JSONL 两种 AI 训练格式 |
+
+> 有效新增：~710 行 TS + ~636 行直接复用 CSS/JS。大幅缩减自原估算 2,178 行。
 
 ### 3.4 数据流
 
@@ -194,6 +207,28 @@ WF 已有的模块直接保留。以下是从零移植的：
 - installer.nsh VC++ 兜底已实现（22-65行），修正 plan.md §3.6
 - 阶段 0-3 和 A/B 完成状态同步
 
+### 阶段 5：E2E 冒烟测试 ✅（2026-07-11 完成）
+- 密钥注入提取验证通过（wx_key.dll, 普通权限）
+- WCDB 连接全链路通过（Electron/Node 24.x 环境，账号2）
+- 修复：React 版本不匹配（react 19.2.3 ≠ react-dom 19.2.7 → 对齐 19.2.7）
+- 应用正常运行：引导 → 密钥 → DB → 会话列表 → 消息浏览
+
+### 阶段 6：GW/WM 补充功能 TS 移植（修订后 — 2026-07-11 规划）
+
+经过逐文件核实 + WF 能力对齐，原 7 项缩减为 3 项移植 + 1 项资源复用：
+
+| 任务 | 模块 | 行数 | 内容 |
+|------|------|------|------|
+| 6A | GW stats.py → TS 词频统计 | 57 | jieba-wasm + ECharts 词云，WF 无此功能 |
+| 6D-assets | GW CSS/JS → 静态资源提取 | 636 | 从 report.py 内嵌变量提取为独立文件 |
+| 6E | WM exporter_docx.py → TS DOCX | 337 | docx npm 包，对接 exportService 格式器 |
+| 6G | WM biz_message.py → TS 补充解析器 | 316 | 红包/视频号/企业名片 3 种类型 |
+
+**跳过的 4 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（insightService 更强）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）。
+
+**遗留项**：
+- Silk→MP3 子进程实测（阶段 3 等待 WCDB 就绪，现已具备条件）
+- `webSecurity: false` ×4 评估替代方案（plan.md §3.6）
+
 ### 待推进
 - **D（可选）**：平台死代码清理（~10 文件 macOS/Linux 分支，无害）
-- **E（远期）**：GW/WM TypeScript 移植（stats/visualizer/personality/report + DOCX/AI_TXT/补充解析器）
