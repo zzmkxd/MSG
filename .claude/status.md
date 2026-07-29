@@ -116,17 +116,17 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 **确认移植（真正的新功能）：**
 | 模块 | 行数 | 方向 |
 |------|------|------|
-| GW stats.py 词频统计 | 57 | → TS + jieba-wasm，WF 无独立词频分析 |
-| WM exporter_docx.py | 337 | → TS + docx npm 包，WF 9 种格式独缺 DOCX |
-| WM biz_message.py | 316 | → TS 补充解析器（红包/视频号/企业名片） |
+| GW stats.py 词频统计 | 57 | → TS + jieba-wasm，WF analyticsService 无分词/词云 |
+| WM exporter_docx.py | 337 | → TS + docx npm 包，WF 8 种格式独缺 DOCX |
 
 **直接复用：** GW CSS (OKLCH 474行) + JS 热力图 (162行) — 从 report.py 内嵌变量提取为独立文件
 
-**跳过的 4 项：**
+**跳过的 5 项：**
 - visualizer.py (262行) — WF ECharts 已覆盖 7 种图表
 - personality.py (141行) — WF insightService + insightProfileService 更强
 - report.py 核心 (1,014行) — WF AnnualReportWindow + HtmlFormatter 等价
 - exporter_ai_txt.py (51行) — WF ChatLab + ChatLab-JSONL 等价
+- biz_message.py (316行) — **SQLite 查询封装，非解析器**。红包/视频号/名片检测已存在 chatService.ts:4795-4806/91-95/108-111。SQL→WCDB 不可翻译。2026-07-29 二次核实后删除。
 
 ### 遗留项
 | 项目 | 来源 | 状态 |

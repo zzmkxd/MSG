@@ -117,15 +117,14 @@ msg/
 
 ### 3.3 需要 TS 移植的模块（2026-07-11 修订）
 
-WF 已有的模块直接保留。经过逐文件核实和 WF 能力对齐，**原 7 项缩减为 3 项 + 1 项资源复用**。
+WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF 能力对齐，**原 7 项缩减为 2 项移植 + 1 项资源复用**。
 
 #### 确认移植（真正的新功能）
 
 | 模块 | 来源 | 行数 | 难度 | 原因 |
 |------|------|------|------|------|
-| 词频统计（stats） | GW Python | 57 | 低 — jieba→jieba-wasm（已在 deps） | WF 无独立词频分析 |
-| DOCX 导出 | WM Python | 337 | 中 — → docx npm 包 | WF 9 种格式独缺 DOCX |
-| 补充消息解析器（红包/视频号/企业名片） | WM Python | 316 | 低 — SQL 查询翻译 | 补充 WF 17 种之外的类型 |
+| 词频统计（stats） | GW Python | 57 | 低 — jieba→jieba-wasm（已在 deps） | WF analyticsService 无 jieba/分词/词云 |
+| DOCX 导出 | WM Python | 337 | 中 — → docx npm 包 | WF 8 种格式独缺 DOCX |
 
 #### 直接复用（无需移植代码）
 
@@ -141,8 +140,9 @@ WF 已有的模块直接保留。经过逐文件核实和 WF 能力对齐，**�
 | personality.py（11维人格） | GW Python | 141 | WF insightService（情感+意图+话题）+ insightProfileService（月度AI画像）更强 |
 | report.py（HTML 报告） | GW Python | 1,014 | WF AnnualReportWindow + HtmlFormatter 等价 |
 | exporter_ai_txt.py（AI 训练文本） | WM Python | 51 | WF ChatLab + ChatLab-JSONL 两种 AI 训练格式 |
+| biz_message.py（补充消息解析器） | WM Python | 316 | **非解析器**，是 SQLite 查询封装（BizMessageDB）。红包/视频号/名片检测已存在 chatService.ts:4795-4806/91-95/108-111。SQL→WCDB 不可翻译 |
 
-> 有效新增：~710 行 TS + ~636 行直接复用 CSS/JS。大幅缩减自原估算 2,178 行。
+> 有效新增：~400 行 TS + ~636 行直接复用 CSS/JS。较原估算 2,178 行缩减 81%。
 
 ### 3.4 数据流
 
@@ -215,16 +215,15 @@ WF 已有的模块直接保留。经过逐文件核实和 WF 能力对齐，**�
 
 ### 阶段 6：GW/WM 补充功能 TS 移植（修订后 — 2026-07-11 规划）
 
-经过逐文件核实 + WF 能力对齐，原 7 项缩减为 3 项移植 + 1 项资源复用：
+经过 2026-07-29 逐文件二次核实 + WF 能力对齐，原 7 项缩减为 2 项移植 + 1 项资源复用：
 
 | 任务 | 模块 | 行数 | 内容 |
 |------|------|------|------|
 | 6A | GW stats.py → TS 词频统计 | 57 | jieba-wasm + ECharts 词云，WF 无此功能 |
 | 6D-assets | GW CSS/JS → 静态资源提取 | 636 | 从 report.py 内嵌变量提取为独立文件 |
 | 6E | WM exporter_docx.py → TS DOCX | 337 | docx npm 包，对接 exportService 格式器 |
-| 6G | WM biz_message.py → TS 补充解析器 | 316 | 红包/视频号/企业名片 3 种类型 |
 
-**跳过的 4 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（insightService 更强）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）。
+**跳过的 5 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（insightService 更强）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）、biz_message.py（SQLite 查询封装，非解析器；红包/视频号/名片检测已存在 chatService.ts）。
 
 **遗留项**：
 - Silk→MP3 子进程实测（阶段 3 等待 WCDB 就绪，现已具备条件）
