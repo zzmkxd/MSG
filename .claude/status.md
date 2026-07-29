@@ -107,7 +107,20 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 - ~~引导流程~~ — 协议 → 账号配置 → 密钥获取 → DB 连接 → 主界面，全部正常。
 - 账号2 (`xx1zzo`) 全链路通过。账号1 (`l63apc`) 返回 -3，可能未登录。
 
-## 阶段 6 前置分析（2026-07-11）
+## 阶段 6：GW/WM 补充功能 TS 移植 ✅（2026-07-29 完成）
+
+经过二次逐文件核实，原 7 项缩减为 2 项移植 + 1 项资源复用。全部完成。
+
+| 任务 | 来源 | 输出 | 行数 | 状态 |
+|------|------|------|------|------|
+| 6D-assets | GW report.py 内嵌 | `src/assets/gw/report.css` + `heatmap.js` | 636 | ✅ |
+| 6A | GW stats.py | `electron/services/wordFrequencyService.ts` | 136 | ✅ |
+| 6E | WM exporter_docx.py | `electron/services/export/formatters/DocxFormatter.ts` | 256 | ✅ |
+| ~~6G~~ | WM biz_message.py | 删除 — SQLite 查询封装，WF chatService 已覆盖 | — | ❌ |
+
+新增依赖：`docx` v9.7.1。
+
+## 阶段 6 前置分析（2026-07-11，2026-07-29 更新）
 
 ### GW/WM 移植范围修订
 

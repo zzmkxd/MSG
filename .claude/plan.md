@@ -213,15 +213,15 @@ WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF �
 - 修复：React 版本不匹配（react 19.2.3 ≠ react-dom 19.2.7 → 对齐 19.2.7）
 - 应用正常运行：引导 → 密钥 → DB → 会话列表 → 消息浏览
 
-### 阶段 6：GW/WM 补充功能 TS 移植（修订后 — 2026-07-11 规划）
+### 阶段 6：GW/WM 补充功能 TS 移植 ✅（2026-07-29 完成）
 
-经过 2026-07-29 逐文件二次核实 + WF 能力对齐，原 7 项缩减为 2 项移植 + 1 项资源复用：
+经过 2026-07-29 逐文件二次核实 + WF 能力对齐，原 7 项缩减为 2 项移植 + 1 项资源复用，全部完成。
 
-| 任务 | 模块 | 行数 | 内容 |
-|------|------|------|------|
-| 6A | GW stats.py → TS 词频统计 | 57 | jieba-wasm + ECharts 词云，WF 无此功能 |
-| 6D-assets | GW CSS/JS → 静态资源提取 | 636 | 从 report.py 内嵌变量提取为独立文件 |
-| 6E | WM exporter_docx.py → TS DOCX | 337 | docx npm 包，对接 exportService 格式器 |
+| 任务 | 模块 | 行数 | 输出 | 状态 |
+|------|------|------|------|------|
+| 6A | GW stats.py → TS 词频统计 | 57 | `electron/services/wordFrequencyService.ts` (136行) | ✅ |
+| 6D-assets | GW CSS/JS → 静态资源提取 | 636 | `src/assets/gw/report.css` + `heatmap.js` | ✅ |
+| 6E | WM exporter_docx.py → TS DOCX | 337 | `electron/services/export/formatters/DocxFormatter.ts` (256行) | ✅ |
 
 **跳过的 5 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（insightService 更强）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）、biz_message.py（SQLite 查询封装，非解析器；红包/视频号/名片检测已存在 chatService.ts）。
 
