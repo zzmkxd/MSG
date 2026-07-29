@@ -82,6 +82,7 @@
       "target": [
         "nsis"
       ],
+      "executableName": "electron",
       "icon": "public/icon.ico",
       "extraFiles": [
         {
@@ -177,6 +178,8 @@
       "node_modules/sherpa-onnx-*/**/*",
       "node_modules/ffmpeg-static/**/*",
       "node_modules/@hicccc77/electron-liquid-glass/**/*",
+      "node_modules/koffi/**/*",
+      "node_modules/@koromix/**/*",
       "resources/wedecrypt/**/*.node",
       "dist-electron/*Worker.js"
     ]

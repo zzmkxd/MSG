@@ -185,6 +185,20 @@ export class WcdbCore {
   setPaths(resourcesPath: string, userDataPath: string): void {
     this.resourcesPath = resourcesPath
     this.userDataPath = userDataPath
+    // Worker threads don't have Electron's process.resourcesPath — inject it.
+    // main.ts passes <app>/resources/resources/ as resourcesPath; Electron's
+    // process.resourcesPath is <app>/resources/ (one level up).
+    if (typeof process.resourcesPath === 'undefined' && resourcesPath) {
+      const { dirname: __dirnameFn } = require('path') as typeof import('path')
+      const appResourcesPath = __dirnameFn(resourcesPath)
+      Object.defineProperty(process, 'resourcesPath', {
+        value: appResourcesPath,
+        writable: false,
+        configurable: true
+      })
+    }
+    // WCDB SDK may use this internally — other workers (annualReport, export, dualReport) set it
+    process.env.WCDB_RESOURCES_PATH = resourcesPath
     this.writeLog(`[bootstrap] setPaths resourcesPath=${resourcesPath} userDataPath=${userDataPath}`, true)
   }
 
@@ -346,12 +360,17 @@ export class WcdbCore {
     // 基础路径探测
     const isPackaged = typeof process['resourcesPath'] !== 'undefined'
     const resourcesPath = isPackaged ? process.resourcesPath : join(process.cwd(), 'resources')
+    // Worker threads don't have process.resourcesPath — fallback via __dirname
+    const workerRoot = typeof __dirname !== 'undefined'
+      ? join(__dirname, '..', '..', '..', 'resources', 'resources')
+      : null
     const roots = [
       process.env.WCDB_RESOURCES_PATH || null,
       this.resourcesPath || null,
       join(resourcesPath, 'resources'),
       resourcesPath,
-      join(process.cwd(), 'resources')
+      join(process.cwd(), 'resources'),
+      workerRoot
     ].filter(Boolean) as string[]
 
     const normalizedArch = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -763,8 +782,10 @@ export class WcdbCore {
       this.writeLog(`[bootstrap] initialize platform=${process.platform} dllPath=${dllPath} resourcesPath=${this.resourcesPath || ''} userDataPath=${this.userDataPath || ''}`, true)
 
       if (!existsSync(dllPath)) {
-        console.error('WCDB数据服务不存在:', dllPath)
+        const msg = `WCDB DLL 不存在: ${dllPath}`
+        console.error(msg)
         this.writeLog(`[bootstrap] initialize failed:数据服务not found path=${dllPath}`, true)
+        lastDllInitError = msg
         return false
       }
 
@@ -814,6 +835,7 @@ export class WcdbCore {
       this.writeLog('[bootstrap] koffi.load ok', true)
 
       // InitProtection (Added for security)
+      const triedPaths: string[] = []
       try {
         this.wcdbInitProtection = this.lib.func('int32 InitProtection(const char* resourcePath)')
 
@@ -839,6 +861,7 @@ export class WcdbCore {
           try {
             this.writeLog(`[bootstrap] InitProtection call path=${resPath}`, true)
             protectionCode = Number(this.wcdbInitProtection(resPath))
+            triedPaths.push(`${resPath}=${protectionCode}`)
             if (protectionCode === 0) {
               protectionOk = true
               break
@@ -854,8 +877,8 @@ export class WcdbCore {
 
         if (!protectionOk) {
           const finalCode = bestFailCode ?? protectionCode
-          lastDllInitError = this.formatInitProtectionError(finalCode)
-          this.writeLog(`[bootstrap] InitProtection failed finalCode=${finalCode}`, true)
+          lastDllInitError = `InitProtection failed code=${finalCode} dllDir=${dllDir} tried=${triedPaths.join(' | ')}`
+          this.writeLog(`[bootstrap] InitProtection failed finalCode=${finalCode} tried=${triedPaths.join(' | ')}`, true)
           return false
         }
       } catch (e) {
@@ -1343,11 +1366,17 @@ export class WcdbCore {
       }
 
 
-      // 初始化
+      // 初始化 — 尝试切换到应用根目录（DLL 可能依赖此路径）
+      const prevCwd = process.cwd()
+      const appRoot = typeof __dirname !== 'undefined'
+        ? join(__dirname, '..', '..', '..')
+        : process.cwd()
+      try { process.chdir(appRoot) } catch { /* ignore */ }
       const initResult = this.wcdbInit()
+      try { process.chdir(prevCwd) } catch { /* ignore */ }
       if (initResult !== 0) {
         console.error('WCDB 初始化失败:', initResult)
-        lastDllInitError = this.formatInitProtectionError(initResult)
+        lastDllInitError = `wcdb_init failed code=${initResult} tried=[${triedPaths.join(' | ')}]`
         return false
       }
 
@@ -1358,7 +1387,7 @@ export class WcdbCore {
       const errorMsg = e instanceof Error ? e.message : String(e)
       console.error('WCDB 初始化异常:', errorMsg)
       this.writeLog(`WCDB 初始化异常: ${errorMsg}`, true)
-      lastDllInitError = this.formatInitProtectionError(-2302)
+      lastDllInitError = `WCDB 初始化异常: ${errorMsg} (错误码: -2302)`
       return false
     }
   }
