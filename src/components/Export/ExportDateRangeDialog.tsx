@@ -329,7 +329,12 @@ export function ExportDateRangeDialog({
     setDraft(prev => {
       const dateObj = boundary === 'start' ? prev.dateRange.start : prev.dateRange.end
       const newDate = new Date(dateObj)
-      newDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0)
+      newDate.setHours(
+        parsedTime.hours,
+        parsedTime.minutes,
+        boundary === 'end' ? 59 : 0,
+        boundary === 'end' ? 999 : 0
+      )
       return {
         ...prev,
         preset: 'custom',
@@ -418,8 +423,8 @@ export function ExportDateRangeDialog({
     )
   }
 
-  // Check if date input string contains time (YYYY-MM-DD HH:mm format)
-  const dateInputHasTime = (dateStr: string): boolean => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$/.test(dateStr.trim())
+  // Check if date input string contains time (YYYY-MM-DD HH:mm[:ss] format)
+  const dateInputHasTime = (dateStr: string): boolean => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?$/.test(dateStr.trim())
 
   const commitStartFromInput = useCallback(() => {
     const parsedDate = parseDateInputValue(dateInput.start)
@@ -448,7 +453,8 @@ export function ExportDateRangeDialog({
     if (!dateInputHasTime(dateInput.end)) {
       const parsedTime = parseTimeValue(timeInput.end)
       if (parsedTime) {
-        parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0)
+        // End time is inclusive: selecting 23:59 must include the whole final minute.
+        parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 59, 999)
       }
     }
     setDateInputError(prev => ({ ...prev, end: false }))

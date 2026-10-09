@@ -154,28 +154,33 @@ export function useExportTasks(): ExportTasksResult {
           { taskId }
         )
 
-        updateTask(taskId, (task) => ({
-          ...task,
-          status: result?.success ? 'success' : 'error',
-          finishedAt: Date.now(),
-          error: result?.error || undefined,
-          sessionOutputPaths: result?.sessionOutputPaths
-        }))
+        updateTask(taskId, (task) => {
+          const stopped = result?.stopped === true
+          return {
+            ...task,
+            status: stopped ? 'canceled' : (result?.success ? 'success' : 'error'),
+            finishedAt: Date.now(),
+            error: stopped ? undefined : (result?.error || undefined),
+            sessionOutputPaths: result?.sessionOutputPaths
+          }
+        })
 
         if (payload.source === 'automation') {
           const finishedAt = Date.now()
           updateAutomationRunState(payload.automationTaskId, (prev) => {
             const previousSuccessCount = Math.max(0, Math.floor(Number(prev.runState?.successCount || 0)))
+            const stopped = result?.stopped === true
+            const completedSuccessfully = result?.success === true && !stopped
             return {
               ...prev,
               updatedAt: finishedAt,
               runState: {
                 ...(prev.runState || {}),
-                lastRunStatus: result?.success ? 'success' : 'error',
+                lastRunStatus: completedSuccessfully ? 'success' : 'error',
                 lastFinishedAt: finishedAt,
-                lastSuccessAt: result?.success ? finishedAt : prev.runState?.lastSuccessAt,
-                lastError: result?.success ? undefined : (result?.error || '导出失败'),
-                successCount: result?.success ? previousSuccessCount + 1 : previousSuccessCount
+                lastSuccessAt: completedSuccessfully ? finishedAt : prev.runState?.lastSuccessAt,
+                lastError: completedSuccessfully ? undefined : (stopped ? '用户已取消' : (result?.error || '导出失败')),
+                successCount: completedSuccessfully ? previousSuccessCount + 1 : previousSuccessCount
               }
             }
           })
@@ -216,7 +221,22 @@ export function useExportTasks(): ExportTasksResult {
   const cancelTask = useCallback((taskId: string) => {
     updateTask(taskId, (task) => {
       if (task.status === 'running') {
-        window.electronAPI.export.cancelTask(taskId)
+        void window.electronAPI.export.cancelTask(taskId).then((result) => {
+          if (result?.success !== false) return
+          updateTask(taskId, (current) => ({
+            ...current,
+            status: 'error',
+            finishedAt: Date.now(),
+            error: result?.error || '取消导出失败'
+          }))
+        }).catch((error) => {
+          updateTask(taskId, (current) => ({
+            ...current,
+            status: 'error',
+            finishedAt: Date.now(),
+            error: error instanceof Error ? error.message : String(error)
+          }))
+        })
         return { ...task, status: 'cancel_requested' }
       }
       return task
@@ -228,7 +248,7 @@ export function useExportTasks(): ExportTasksResult {
   }, [])
 
   const activeTasks = tasks.filter(t => t.status === 'running' || t.status === 'cancel_requested')
-  const completedTasks = tasks.filter(t => t.status === 'success' || t.status === 'error')
+  const completedTasks = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'canceled')
 
   return {
     tasks,

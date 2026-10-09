@@ -12,6 +12,18 @@ export function getLastDllInitError(): string | null {
   return lastDllInitError
 }
 
+// Rust 数据层（开源版 wcdb_api.dll）错误码 → 用户可读文案。
+// 语义参照 fork 参考实现 wf-rust 的 formatInitProtectionError（CC-BY-NC-SA 许可），
+// 此处按 MSG 文案风格改写：-1=通用失败、-2=句柄无效、-3=参数无效、-4=只读拒绝写、-99=内部 panic。
+// 旧版 DLL 的 -7（无消息库）已不再出现，不在此新增映射（未知码仍走通用兜底文案）。
+const RUST_DLL_ERROR_MESSAGES: Record<number, string> = {
+  '-1': '数据读取失败，请检查微信数据目录与密钥是否正确（详情见日志）',
+  '-2': '数据库连接已失效，请重新连接后再试',
+  '-3': '操作参数无效，请刷新页面后重试',
+  '-4': '当前为只读浏览模式，该操作不可用',
+  '-99': '数据层内部异常，请重启应用后重试',
+}
+
 function cleanAccountDirName(dirName: string): string {
   const trimmed = dirName.trim()
   if (!trimmed) return trimmed
@@ -408,9 +420,16 @@ export class WcdbCore {
       '-2301': '动态库加载失败，请检查安装是否完整',
       '-2302': 'WCDB 初始化异常，请重试',
       '-2303': 'WCDB 未能成功初始化',
+      // Rust 数据层错误码（-1/-2/-3/-4/-99），文案见模块顶部 RUST_DLL_ERROR_MESSAGES
+      ...RUST_DLL_ERROR_MESSAGES,
     }
     const msg = messages[String(code) as unknown as keyof typeof messages]
     return msg ? `${msg} (错误码: ${code})` : `操作失败，错误码: ${code}`
+  }
+
+  private formatDllError(status: number): string {
+    const msg = RUST_DLL_ERROR_MESSAGES[status]
+    return msg ? `${msg} (错误码: ${status})` : `DLL error ${status}`
   }
 
   private isLogEnabled(): boolean {
@@ -1884,7 +1903,9 @@ export class WcdbCore {
 
       if (result !== 0) {
         console.error('打开数据库失败:', result)
-        await this.printLogs()
+        // R1 取证补丁（2026-10-09）：force=true 确保失败原因文本写入日志，
+        // 否则 worker 侧 logEnabled=false 会把 wcdb_get_logs 的原文丢弃。
+        await this.printLogs(true)
         this.writeLog(`open failed: openAccount code=${result}`)
         lastDllInitError = this.formatInitProtectionError(result)
         return false
@@ -4767,7 +4788,7 @@ export class WcdbCore {
         return { success: true, alreadyInstalled: true }
       }
       if (status !== 0) {
-        return { success: false, error: msg || `DLL error ${status}` }
+        return { success: false, error: msg || this.formatDllError(status) }
       }
       return { success: true, alreadyInstalled: false }
     } catch (e) {
@@ -4789,7 +4810,7 @@ export class WcdbCore {
         try { this.wcdbFreeString(outPtr[0]) } catch { }
       }
       if (status !== 0) {
-        return { success: false, error: msg || `DLL error ${status}` }
+        return { success: false, error: msg || this.formatDllError(status) }
       }
       return { success: true }
     } catch (e) {
@@ -4806,7 +4827,7 @@ export class WcdbCore {
       const outInstalled = [0]
       const status = this.wcdbCheckMessageAntiRevokeTrigger(this.handle, normalizedSessionId, outInstalled)
       if (status !== 0) {
-        return { success: false, error: `DLL error ${status}` }
+        return { success: false, error: this.formatDllError(status) }
       }
       return { success: true, installed: outInstalled[0] === 1 }
     } catch (e) {
@@ -4884,7 +4905,7 @@ export class WcdbCore {
         return { success: true, alreadyInstalled: true }
       }
       if (status !== 0) {
-        return { success: false, error: msg || `DLL error ${status}` }
+        return { success: false, error: msg || this.formatDllError(status) }
       }
       return { success: true, alreadyInstalled: false }
     } catch (e) {
@@ -4907,7 +4928,7 @@ export class WcdbCore {
         try { this.wcdbFreeString(outPtr[0]) } catch { }
       }
       if (status !== 0) {
-        return { success: false, error: msg || `DLL error ${status}` }
+        return { success: false, error: msg || this.formatDllError(status) }
       }
       return { success: true }
     } catch (e) {
@@ -4925,7 +4946,7 @@ export class WcdbCore {
       const outInstalled = [0]
       const status = this.wcdbCheckSnsBlockDeleteTrigger(this.handle, outInstalled)
       if (status !== 0) {
-        return { success: false, error: `DLL error ${status}` }
+        return { success: false, error: this.formatDllError(status) }
       }
       return { success: true, installed: outInstalled[0] === 1 }
     } catch (e) {
@@ -4945,7 +4966,7 @@ export class WcdbCore {
         try { this.wcdbFreeString(outPtr[0]) } catch { }
       }
       if (status !== 0) {
-        return { success: false, error: msg || `DLL error ${status}` }
+        return { success: false, error: msg || this.formatDllError(status) }
       }
       return { success: true }
     } catch (e) {

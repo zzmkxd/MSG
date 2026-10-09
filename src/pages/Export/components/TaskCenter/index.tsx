@@ -52,7 +52,7 @@ const TaskCenter: React.FC<TaskCenterProps> = ({
   
   if (!hasTasks) return null
 
-  const completedExportTasks = exportTasks.filter(t => t.status === 'success' || t.status === 'error')
+  const completedExportTasks = exportTasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'canceled')
   const completedBackgroundTasks = backgroundTasks.filter(isBackgroundTaskSettled)
   const hasCompletedTasks = completedExportTasks.length > 0 || completedBackgroundTasks.length > 0
 
@@ -90,8 +90,9 @@ const TaskCenter: React.FC<TaskCenterProps> = ({
                   {task.status === 'running' && <Loader2 className="spin" size={12} />}
                   {task.status === 'success' && <CheckCircle2 size={12} />}
                   {task.status === 'error' && <XCircle size={12} />}
+                  {task.status === 'canceled' && <StopCircle size={12} />}
                   {task.status === 'cancel_requested' && <Loader2 className="spin" size={12} />}
-                  {task.status === 'running' ? '导出中' : task.status === 'success' ? '已完成' : task.status === 'cancel_requested' ? '取消中' : '失败'}
+                  {task.status === 'running' ? '导出中' : task.status === 'success' ? '已完成' : task.status === 'cancel_requested' ? '取消中' : task.status === 'canceled' ? '已取消' : '失败'}
                 </span>
               </div>
               <div className="task-actions">
@@ -178,6 +179,11 @@ const TaskCenter: React.FC<TaskCenterProps> = ({
                         {bgTask.detail && <span className="phase">{bgTask.detail}</span>}
                         {bgTask.progressText && <span className="count">{bgTask.progressText}</span>}
                       </div>
+                    </div>
+                  )}
+                  {bgTask.status === 'failed' && (
+                    <div className="task-error-msg">
+                      <span>{bgTask.detail || bgTask.progressText || '后台任务执行失败'}</span>
                     </div>
                   )}
                 </div>

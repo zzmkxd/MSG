@@ -17,6 +17,7 @@ export type TaskStatus =
   | 'pause_requested'
   | 'paused'
   | 'cancel_requested'
+  | 'canceled'
   | 'success'
   | 'error'
 

@@ -6,6 +6,8 @@
  * WF analyticsService 无词频/分词功能，此为 net-new 能力
  */
 
+import { stripXmlText } from './xmlTextCleaner'
+
 // jieba-wasm 是 CJS wasm-pack 模块，require 加载
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { cut } = require('jieba-wasm') as { cut: (text: string, hmm?: boolean) => string[] }
@@ -22,6 +24,17 @@ const STOP_WORDS = new Set([
   '所以', '因为', '如果', '可以', '还是', '已经', '什么', '怎么', '为什么',
   '就是', '还有', '其实', '感觉', '觉得', '现在', '时候', '一个',
   '这个', '那个', '一下', '一起', '一直', '一样', '一点', '一些',
+  // ── XML 标记残留兜底（R3：stripXmlText 已在上游剥离，此处防历史缓存/未剥离路径仍污染）──
+  // 名单 = 2026-10-09 实测词云前 22 词条（supp-keypage.json / probe.log）：
+  //   CDATA gt lt type msgsource null id version msg title content scene
+  //   &# node wxid lastG MsgID appmsg fromusername appinfo refermsg appattachs
+  // 另补实体名残留（amp/quot/apos/nbsp）与大小写变体（cdata）。
+  'CDATA', 'cdata', 'gt', 'lt', 'amp', 'quot', 'apos', 'nbsp',
+  'msgsource', 'null', 'type', 'version', 'msg', 'title', 'scene', 'content', 'id',
+  '&#', 'node', 'wxid', 'lastG', 'MsgID', 'appmsg', 'fromusername',
+  'appinfo', 'refermsg', 'appattachs',
+  // R3b：<?xml version="1.0"?> 处理指令的残余兜底（stripXmlText 已剥 PI，此处防漏）
+  'xml', '1.0',
 ])
 
 // ── 类型 ────────────────────────────────────────────────────────────────────────
@@ -72,6 +85,11 @@ function mergeCounters(target: Record<string, number>, source: Record<string, nu
 export function computeWordFrequency(records: MessageRecord[]): WordFrequencyStats {
   const contents = records.map((r) => r.content)
 
+  // 分词前剥离微信 4.x 消息体的 XML 包裹/实体（对纯中文文本是恒等变换）。
+  // 只作用于分词与 emoji 统计；totalChars / avgLength / lengthSeries 仍按原始 content 计算，
+  // 与消息长度直方图（getSessionContentScan 按原始长度分桶）保持同一口径。
+  const cleanedContents = contents.map(stripXmlText)
+
   // 时序统计
   const dailyCounts: Record<string, number> = {}
   const hourlyRaw: number[] = new Array(24).fill(0)
@@ -94,7 +112,7 @@ export function computeWordFrequency(records: MessageRecord[]): WordFrequencySta
   }
 
   // 中文分词
-  const allText = contents.join(' ')
+  const allText = cleanedContents.join(' ')
   const words = cut(allText).filter(
     (w) => w.length > 1 && !STOP_WORDS.has(w) && !/^\s+$/.test(w)
   )
@@ -102,7 +120,7 @@ export function computeWordFrequency(records: MessageRecord[]): WordFrequencySta
 
   // emoji 统计
   const allEmojis: string[] = []
-  for (const text of contents) {
+  for (const text of cleanedContents) {
     const matches = text.match(EMOJI_RE)
     if (matches) allEmojis.push(...matches)
   }

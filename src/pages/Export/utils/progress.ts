@@ -81,6 +81,7 @@ export const getTaskStatusLabel = (task: ExportTask): string => {
   if (task.status === 'pause_requested') return '暂停中'
   if (task.status === 'paused') return '已暂停'
   if (task.status === 'cancel_requested') return '取消中'
+  if (task.status === 'canceled') return '已取消'
   if (task.status === 'success') return '已完成'
   return '失败'
 }
@@ -89,7 +90,7 @@ export const resolveExportTaskCardClass = (
   status: import('../types').TaskStatus
 ): 'queued' | 'running' | 'paused' | 'stopped' | 'success' | 'error' => {
   if (status === 'pause_requested' || status === 'paused') return 'paused'
-  if (status === 'cancel_requested') return 'stopped'
+  if (status === 'cancel_requested' || status === 'canceled') return 'stopped'
   return status
 }
 

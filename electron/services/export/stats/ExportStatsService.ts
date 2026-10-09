@@ -1,5 +1,5 @@
 import { parallelLimit } from '../utils/parallelLimit';
-import { ExportOptions, ExportProgress, ExportStatsResult, ExportStatsCacheEntry, ExportStatsSessionSnapshot, ExportAggregatedSessionMetric } from '../types';
+import { ExportOptions, ExportProgress, ExportStatsResult, ExportStatsCacheEntry, ExportStatsSessionSnapshot, ExportAggregatedSessionMetric, ExportAggregatedSessionStatsCacheEntry } from '../types';
 import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
@@ -53,10 +53,10 @@ export class ExportStatsService {
           return { totalMessages: 0, voiceMessages: 0, cachedVoiceCount: 0, needTranscribeCount: 0, mediaMessages: 0, estimatedSeconds: 0, sessions: [] }
         }
 
-        const cacheKey = this.buildExportStatsCacheKey(normalizedSessionIds, options, conn.cleanedWxid);
-        const cachedStats = this.getExportStatsCacheEntry(cacheKey);
+        const cacheKey = this.context.buildExportStatsCacheKey(normalizedSessionIds, options, conn.cleanedWxid);
+        const cachedStats = this.context.getExportStatsCacheEntry(cacheKey);
         if (cachedStats) {
-          const cachedResult = this.cloneExportStatsResult(cachedStats.result)
+          const cachedResult = this.context.cloneExportStatsResult(cachedStats.result)
           const orderedSessions: Array<{ sessionId: string; displayName: string; totalCount: number; voiceCount: number }> = []
           const sessionMap = new Map(cachedResult.sessions.map((item) => [item.sessionId, item] as const))
           for (const sessionId of normalizedSessionIds) {
@@ -80,7 +80,7 @@ export class ExportStatsService {
         const canUseAggregatedStats = this.context.isUnboundedDateRange(options.dateRange) && !hasSenderFilter;
         if (canUseAggregatedStats) {
           try {
-            let aggregatedData = this.getAggregatedSessionStatsCache(cacheKey)
+            let aggregatedData = this.context.getAggregatedSessionStatsCache(cacheKey)
             if (!aggregatedData) {
               const statsResult = await chatService.getExportSessionStats(normalizedSessionIds, {
                 includeRelations: false,
@@ -88,7 +88,7 @@ export class ExportStatsService {
               })
               if (statsResult.success && statsResult.data) {
                 aggregatedData = statsResult.data as Record<string, ExportAggregatedSessionMetric>
-                this.setAggregatedSessionStatsCache(cacheKey, aggregatedData)
+                this.context.setAggregatedSessionStatsCache(cacheKey, aggregatedData)
               }
             }
             if (aggregatedData) {
@@ -182,9 +182,9 @@ export class ExportStatsService {
                 estimatedSeconds,
                 sessions: sessionsStats
               }
-              this.setExportStatsCacheEntry(cacheKey, {
+              this.context.setExportStatsCacheEntry(cacheKey, {
                 createdAt: Date.now(),
-                result: this.cloneExportStatsResult(result),
+                result: this.context.cloneExportStatsResult(result),
                 sessions: { ...sessionSnapshotMap }
               })
               return result
@@ -260,11 +260,42 @@ export class ExportStatsService {
                   estimatedSeconds,
                   sessions: sessionsStats
                 };
-        this.setExportStatsCacheEntry(cacheKey, {
+        this.context.setExportStatsCacheEntry(cacheKey, {
           createdAt: Date.now(),
-          result: this.cloneExportStatsResult(result),
+          result: this.context.cloneExportStatsResult(result),
           sessions: { ...sessionSnapshotMap }
         })
         return result
+    }
+
+    /**
+     * 聚合会话统计（委托给 ExportContext 的缓存实现）
+     */
+    async getAggregatedSessionStats(
+      sessionIds: string[],
+      options: ExportOptions
+    ): Promise<ExportAggregatedSessionStatsCacheEntry | null> {
+      const conn = await this.context.ensureConnected()
+      if (!conn.success || !conn.cleanedWxid) return null
+
+      const normalizedSessionIds = this.context.normalizeSessionIds(sessionIds)
+      if (normalizedSessionIds.length === 0) return null
+      if (!this.context.isUnboundedDateRange(options.dateRange) || String(options.senderUsername || '').trim()) {
+        return null
+      }
+
+      const cacheKey = this.context.buildExportStatsCacheKey(normalizedSessionIds, options, conn.cleanedWxid)
+      let data = this.context.getAggregatedSessionStatsCache(cacheKey)
+      if (!data) {
+        const statsResult = await chatService.getExportSessionStats(normalizedSessionIds, {
+          includeRelations: false,
+          allowStaleCache: true
+        })
+        if (!statsResult.success || !statsResult.data) return null
+        data = statsResult.data as Record<string, ExportAggregatedSessionMetric>
+        this.context.setAggregatedSessionStatsCache(cacheKey, data)
+      }
+
+      return { createdAt: Date.now(), data }
     }
 }

@@ -253,10 +253,27 @@ const collectWeliveErrorText = (result: any): string => {
     .join('\n')
 }
 
-const isWeliveNativeCrashResult = (result: any): boolean => {
+// 判定「welive 引擎本身不可用」而非「welive 可用、仅个别会话导出失败」。
+// 2026-10-09 过期事件：welive.exe 厂商时间炸弹（与数据层 wcdb -101 同源）自报
+// "error: this build has expired" 并以退出码 1（0x00000001）结束，不匹配任何已知
+// 原生崩溃码 → 此前无法进入 legacy 回退，导致所有导出在 welive 处死掉。
+// 规则（任一命中即视为引擎不可用 → 落 legacy 回退）：
+//   1. 已知原生崩溃码（0xC0000005 / 3221225477 / -1073741819）—— 原有判定，保留；
+//   2. 输出含 "expired" —— 本次过期时间炸弹；
+//   3. 错误文本带 [welive-diagnostics] 且退出码非 0 —— 引擎级失败、未产出成功结构
+//      （welive 启动失败 / 退出码 1 等一律覆盖；诊断头由 weliveBridge 生成，
+//      会话级错误不带，故不会误伤会话级失败）；
+//   4. 未找到 welive 可执行文件。
+// 若 welive 曾正常输出（错误仅为会话级、无诊断头），视为会话级失败、不回退，
+// 避免 legacy 重跑已成功会话造成重复导出；welive 若恢复（输出正常）仍优先使用。
+const isWeliveUnavailableResult = (result: any): boolean => {
   if (!result || result.success) return false
   const text = collectWeliveErrorText(result)
-  return /3221225477|0x?c0000005|-1073741819/i.test(text)
+  if (/3221225477|0x?c0000005|-1073741819/i.test(text)) return true
+  if (/expired/i.test(text)) return true
+  if (/\[welive-diagnostics\]\s*exit=(?:[1-9]\d*|signal:)/i.test(text)) return true
+  if (/未找到 WeLive 导出引擎/.test(text)) return true
+  return false
 }
 
 async function runWeliveEngine() {
@@ -580,7 +597,7 @@ async function runLegacyEngine() {
 async function run() {
   if (shouldUseWeliveEngine()) {
     const result = await runWeliveEngine()
-    if (!isWeliveNativeCrashResult(result)) {
+    if (!isWeliveUnavailableResult(result)) {
       flushProgress()
       flushCreatedPaths()
       parentPort?.postMessage({

@@ -12,6 +12,11 @@ import { parallelLimit } from '../../export/utils/parallelLimit';
 import {  ExportDisplayProfile, MediaExportItem  } from '../../export/types';
 import { wcdbService } from "../../wcdbService";
 
+/** JSON that is safe both in an inline script and in an external data chunk. */
+export function serializeHtmlScriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+}
+
 export class HtmlFormatter {
   constructor(private exportService: any) {}
 
@@ -446,7 +451,7 @@ export class HtmlFormatter {
         if (platformMessageId) itemObj.p = platformMessageId
         if (replyToMessageId) itemObj.r = replyToMessageId
 
-        writeBuf.push(JSON.stringify(itemObj))
+        writeBuf.push(serializeHtmlScriptJson(itemObj))
 
         // Flush buffer periodically
         if (writeBuf.length >= WRITE_BATCH || i === sortedMessages.length - 1) {
