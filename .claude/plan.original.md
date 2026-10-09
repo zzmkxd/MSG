@@ -1,6 +1,6 @@
 # 实施方案
 
-> 方案 A：Electron + TypeScript + React，WF 主骨架（~80%）。WM/GW 补充。
+> 方案 A：Electron + TypeScript + React，以 WeFlow 为主骨架。WM/GW 补充。
 
 ---
 
@@ -29,8 +29,8 @@
 - WF `snsService.ts` + `src/pages/Sns/` 直接复用
 
 ### 6. 导出
-- **WF 保留**：HTML / JSON / TXT / Markdown / Excel / SQL / ChatLab / WeClone（8 格式化器，格式 ID 11 种含 `docx`）
-- **TS 移植**：DOCX（参考 WM `exporter_docx.py`，2026-10-09 已接线）+ AI 训练 TXT（参考 WM `exporter_ai_txt.py`，由 ChatLab 等价，未移植）
+- **WF 保留**：CSV / HTML / JSON / TXT / Markdown / Excel / SQL（7 种格式化器）
+- **TS 移植**：DOCX（参考 WM `exporter_docx.py`）+ AI 训练 TXT（参考 WM `exporter_ai_txt.py`）
 - Excel 补充 WM 公众号专用模式（支付/收款/步数/快递）
 
 ### 7. 分析与报告
@@ -58,7 +58,7 @@
 | 导出 | 流式分批 flush | 80-160 条/批，1-6 会话并发 |
 | 媒体缓存 | LRU 磁盘 | 6 GB / 12 万文件 / 45 天 TTL |
 | 群统计 | 分批读取 | 360 条/批，上限 3000 条/群 |
-| AI 画像 | 按月分批 | 800 条/月（上游 WF 口径，MSG 不做 AI） |
+| AI 画像 | 按月分批 | 800 条/月 |
 | 图片解密 | Worker 线程池 | 独立线程 |
 
 ### v1 vs v2
@@ -102,7 +102,7 @@ msg/
 │       ├── wcdbCore.ts            # WCDB 桥（80+ 操作）
 │       ├── exportService/         # 导出（10 种格式）
 │       ├── analyticsService.ts    # 聊天统计
-│       ├── insightService.ts      # AI 分析（personality 不移植，2026-10-09）
+│       ├── insightService.ts      # AI 分析（+ GW personality）
 │       ├── snsService.ts          # 朋友圈
 │       ├── config.ts              # 配置管理
 │       └── dbPathService.ts       # 路径解析
@@ -131,7 +131,7 @@ WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF �
 
 | 资源 | 来源 | 行数 | 方式 |
 |------|------|------|------|
-| GW CSS（OKLCH 主题） + JS 热力图 | GW report.py 内嵌 | 630 | 提取为独立 .css/.js 文件（2026-10-09 解锁：可删/归档） |
+| GW CSS（OKLCH 主题） + JS 热力图 | GW report.py 内嵌 | 636 | 提取为独立 .css/.js 文件 |
 
 #### 跳过的模块（WF 已有等价或更强的实现）
 
@@ -143,7 +143,7 @@ WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF �
 | exporter_ai_txt.py（AI 训练文本） | WM Python | 51 | WF ChatLab + ChatLab-JSONL 两种 AI 训练格式 |
 | biz_message.py（补充消息解析器） | WM Python | 316 | **非解析器**，是 SQLite 查询封装（BizMessageDB）。红包/视频号/名片检测已存在 chatService.ts:4795-4806/91-95/108-111。SQL→WCDB 不可翻译 |
 
-> 有效新增：~400 行 TS + ~630 行直接复用 CSS/JS。较原估算 2,178 行缩减 81%。
+> 有效新增：~400 行 TS + ~636 行直接复用 CSS/JS。较原估算 2,178 行缩减 81%。
 
 ### 3.4 数据流
 
@@ -216,7 +216,7 @@ WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF �
 
 ### 阶段 6：GW/WM 补充功能 TS 移植 ✅（2026-07-29 完成）
 
-> 2026-10-09 更新：6A/6D/6E 三条已接线（b0e4dfb）；6D-assets 已解锁可删/归档。
+经过 2026-07-29 逐文件二次核实 + WF 能力对齐，原 7 项缩减为 2 项移植 + 1 项资源复用，全部完成。
 
 | 任务 | 模块 | 行数 | 输出 | 状态 |
 |------|------|------|------|------|
@@ -224,7 +224,7 @@ WF 已有的模块直接保留。经过 2026-07-29 逐文件二次核实 + WF �
 | 6D-assets | GW CSS/JS → 静态资源提取 | 630 | `src/assets/gw/report.css`(462) + `heatmap.js`(168) | ✅ 已提取，零引用 → 2026-10-09 解锁可删/归档 |
 | 6E | WM exporter_docx.py → TS DOCX | 337 | `electron/services/export/formatters/DocxFormatter.ts` (322行) | ✅ 已接线（2026-10-09；E2E 未验） |
 
-**跳过的 5 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（2026-10-09 决策不做人格/MBTI）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）、biz_message.py（SQLite 查询封装，非解析器）。
+**跳过的 5 项**（WF 已有等价或更强实现）：visualizer.py（ECharts 覆盖）、personality.py（insightService 更强）、report.py 核心逻辑（AnnualReportWindow 等价）、exporter_ai_txt.py（ChatLab 格式等价）、biz_message.py（SQLite 查询封装，非解析器；红包/视频号/名片检测已存在 chatService.ts）。
 
 **遗留项**：
 - Silk→MP3 子进程实测（WCDB 2026-10-09 起停摆，待 DB 恢复后测）

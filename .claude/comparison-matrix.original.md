@@ -5,7 +5,7 @@
 三个参考项目：
 - **WF** = WeFlow_for_archlinux-main（Electron 应用，**主骨架**）
 - **WM** = WeChatMsg-master（Python，解密舍弃，保留解析/导出/Silk 参考）
-- **GW** = ginger_wechat_portrait（Python 分析模块，仅 stats 移植）
+- **GW** = ginger_wechat_portrait（Python 分析模块，需 TS 移植）
 
 ---
 
@@ -59,11 +59,11 @@
 
 | 功能 | 来源 | 策略 |
 |------|------|------|
-| HTML / JSON / TXT / Markdown（+ Excel / SQL / ChatLab / WeClone） | WF 导出器 | **保留**（格式 ID 共 11 种，含 `docx`） |
+| CSV / HTML / JSON / TXT / Markdown | WF 导出器 | **保留** |
 | Excel | WF 基础 + WM 公众号模式（支付/收款/步数/快递）| **保留改造** |
 | SQL | WF 导出器 | **保留** |
-| DOCX（表格气泡 + 头像 + 分页） | WM `exporter_docx.py` 参考 | TS 移植 ✅ 已接线（2026-10-09） |
-| AF_TXT（AI 训练 + 隐私擦除） | WM `exporter_ai_txt.py` 参考 | ChatLab 等价，未移植 |
+| DOCX（表格气泡 + 头像 + 分页） | WM `exporter_docx.py` 参考 | TS 移植 |
+| AF_TXT（AI 训练 + 隐私擦除） | WM `exporter_ai_txt.py` 参考 | TS 移植 |
 | 批量导出 + 进度反馈 | WF 已有 | **保留** |
 
 ## 7. 分析与报告
@@ -151,7 +151,7 @@ WM `template.html`（5434 行）核心 UI 资产融入 WF 的 `HtmlFormatter.ts`
 | 模块 | 来源 | 策略 |
 |------|------|------|
 | 年度报告（11 场景）、双人报告（9 场景） | WF React 组件 | **保留** |
-| HTML 独立报告（OKLCH CSS 474 行 + 热力图 JS 162 行） | GW | 不移植（WF 年报等价） |
+| HTML 独立报告（OKLCH CSS 474 行 + 热力图 JS 162 行） | GW | CSS/JS 直接复用，Python 模板→React 组件 |
 | 7 套主题（`data-theme` + `data-mode` + OKLCH） | WF | **保留** |
 | SNS 时间线 + 媒体网格 + 联系人过滤 | WF React 组件 | **保留** |
 | 导出中心（会话选择表 + 配置对话框 + 任务管理） | WF React 组件 | **保留** |
@@ -161,6 +161,6 @@ WM `template.html`（5434 行）核心 UI 资产融入 WF 的 `HtmlFormatter.ts`
 | 类别 | 工作量 | 内容 |
 |------|--------|------|
 | WF 直接保留 | ~0 | 聊天界面/报告场景/主题/SNS/导出 UI |
-| WM CSS/JS 融入 | **小** | 从 template.html 提取 CSS 精华，注入 WF HtmlFormatter（未实施，见 §10.2） |
+| WM CSS/JS 融入 | **小** | 从 template.html 提取 CSS 精华，注入 WF HtmlFormatter |
 | GW ECharts 移植 | **中** | 仅词频/直方图已落地；雷达图取消；月趋势/星期分布未渲染 |
 | GW 热力图 | ~0 | 未接线（2026-10-09 解锁可删/归档） |

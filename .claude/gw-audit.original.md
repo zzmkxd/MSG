@@ -9,10 +9,10 @@
 
 | 文件 | 行数 | 角色 | TS 移植 |
 |------|------|------|---------|
-| `stats.py` | 58 | 统计指标计算 | 低（已移植 ✅） |
-| `visualizer.py` | 263 | matplotlib 图表（7种） | 中（不移植） |
-| `personality.py` | 142 | Claude API 人格分析 | 低（不移植） |
-| `report.py` | 1,015 | HTML 报告生成（474 CSS + 162 JS + 375 Python） | 中（不移植） |
+| `stats.py` | 58 | 统计指标计算 | 低 |
+| `visualizer.py` | 263 | matplotlib 图表（7种） | 中 |
+| `personality.py` | 142 | Claude API 人格分析 | 低 |
+| `report.py` | 1,015 | HTML 报告生成（474 CSS + 162 JS + 375 Python） | 中 |
 | `main.py` | 277 | CLI 编排器 | 参考逻辑 |
 | `data_loader.py` | 166 | CSV 加载 + 清洗 + 表情替换 | 低 |
 | `sampler.py` | 68 | 分层时序采样 | 低 |

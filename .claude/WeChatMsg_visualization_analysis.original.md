@@ -58,7 +58,7 @@
 ## 移植要点
 
 - 本项目用 **React + ECharts** 做应用内 GUI，不渲染 WM 的 template.html
-- 仅 **HTML 导出功能** 需要参考 WM 的 CSS/JS 设计，融入 WF 的 `HtmlFormatter.ts`（未实施，见文首）
+- 仅 **HTML 导出功能** 需要参考 WM 的 CSS/JS 设计，融入 WF 的 `HtmlFormatter.ts`
 - 关键复用：三栏布局 CSS、时间线虚线技法、12 种消息卡片样式、lunr.js 搜索集成
 - 高德地图：WF 已有 `AMapComponent.tsx`，不需要 WM 的原始 AMap JS API 调用方式
 - 详细参数（CSS 像素值、颜色码、行号）已省略，实现时直接读 WM 源文件
