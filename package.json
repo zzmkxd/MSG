@@ -18,7 +18,8 @@
     "verify:pack-config": "node scripts/smoke-pack-config.cjs",
     "verify:native": "node scripts/verify-native-modules.cjs",
     "verify:wcdb": "node scripts/verify-wcdb-link.cjs",
-    "verify:inject": "node scripts/verify-wechat-inject.cjs"
+    "verify:inject": "node scripts/verify-wechat-inject.cjs",
+    "native-db:build": "node scripts/build-native-db.cjs"
   },
   "dependencies": {
     "@hicccc77/electron-liquid-glass": "^0.3.0",

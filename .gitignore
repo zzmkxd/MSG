@@ -42,3 +42,9 @@ audit/
 # TypeScript 增量编译信息（composite: true 下 tsc -p tsconfig.node.json 的副产物，
 # 与源码无关，勿入库）
 *.tsbuildinfo
+
+# caveman-compress 的压缩前备份（仅本机保留，不入库；git 历史本身即备份）
+*.original.md
+
+# 过期厂商 DLL 的本地备份（scripts/build-native-db.cjs 生成）
+resources/wcdb/win32/x64/wcdb_api.dll.vendor-expired.bak
