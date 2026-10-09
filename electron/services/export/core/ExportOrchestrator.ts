@@ -34,6 +34,7 @@ import { pathExists, ensureExportDir, copyFileOptimized, hardlinkOrCopyFile } fr
 import { getMediaFileStat } from '../../export/media/attachmentResolver';
 import { ExportContext } from "../core/ExportContext";
 import { ChatLabFormatter } from '../formatters/ChatLabFormatter';
+import { DocxFormatter } from '../formatters/DocxFormatter';
 import { ExcelFormatter } from '../formatters/ExcelFormatter';
 import { HtmlFormatter } from '../formatters/HtmlFormatter';
 import { JsonFormatter } from '../formatters/JsonFormatter';
@@ -107,6 +108,14 @@ export class ExportOrchestrator {
      */
     async exportSessionToSql(sessionId: string, outputPath: string, options: ExportOptions, onProgress?: (progress: ExportProgress) => void, control?: ExportTaskControl): Promise<{ success: boolean; error?: string }> {
         const formatter = new SqlFormatter(this.context);
+        return formatter.export(sessionId, outputPath, options, onProgress, control);
+    }
+
+    /**
+     * 导出单个会话为 DOCX（Word 文档，聊天气泡排版）
+     */
+    async exportSessionToDocx(sessionId: string, outputPath: string, options: ExportOptions, onProgress?: (progress: ExportProgress) => void, control?: ExportTaskControl): Promise<{ success: boolean; error?: string }> {
+        const formatter = new DocxFormatter(this.context);
         return formatter.export(sessionId, outputPath, options, onProgress, control);
     }
 
@@ -387,6 +396,7 @@ export class ExportOrchestrator {
               else if (effectiveOptions.format === 'weclone') ext = '.csv'
               else if (effectiveOptions.format === 'html') ext = '.html'
               else if (effectiveOptions.format === 'sql') ext = '.sql'
+              else if (effectiveOptions.format === 'docx') ext = '.docx'
               const preferredOutputPath = path.join(sessionDir, `${fileNameWithPrefix}${ext}`)
               const canTrySkipUnchanged = canTrySkipUnchangedTextSessions &&
                 typeof messageCountHint === 'number' &&
@@ -442,6 +452,8 @@ export class ExportOrchestrator {
                 result = await this.exportSessionToHtml(sessionId, outputPath, effectiveOptions, sessionProgress, control)
               } else if (effectiveOptions.format === 'sql') {
                 result = await this.exportSessionToSql(sessionId, outputPath, effectiveOptions, sessionProgress, control)
+              } else if (effectiveOptions.format === 'docx') {
+                result = await this.exportSessionToDocx(sessionId, outputPath, effectiveOptions, sessionProgress, control)
               } else {
                 result = { success: false, error: `不支持的格式: ${effectiveOptions.format}` }
               }

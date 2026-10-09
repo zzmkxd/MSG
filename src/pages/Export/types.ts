@@ -43,6 +43,7 @@ export type TextExportFormat =
   | 'excel'
   | 'weclone'
   | 'sql'
+  | 'docx'
 
 export type SnsTimelineExportFormat = 'json' | 'html' | 'arkmejson' | 'markdown'
 

@@ -1,4 +1,4 @@
-﻿import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 type CloseConfirmPayload = {
   canMinimizeToTray: boolean
@@ -431,6 +431,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTimeDistribution: () => ipcRenderer.invoke('analytics:getTimeDistribution'),
     getSelfSentDailyDistribution: (beginTimestamp?: number, endTimestamp?: number, force?: boolean) =>
       ipcRenderer.invoke('analytics:getSelfSentDailyDistribution', beginTimestamp, endTimestamp, force),
+    getMessageLengthHistogram: (beginTimestamp?: number, endTimestamp?: number, force?: boolean) =>
+      ipcRenderer.invoke('analytics:getMessageLengthHistogram', beginTimestamp, endTimestamp, force),
+    getWordFrequency: (sessionId?: string, force?: boolean) =>
+      ipcRenderer.invoke('analytics:getWordFrequency', sessionId, force),
     getExcludedUsernames: () => ipcRenderer.invoke('analytics:getExcludedUsernames'),
     setExcludedUsernames: (usernames: string[]) => ipcRenderer.invoke('analytics:setExcludedUsernames', usernames),
     getExcludeCandidates: () => ipcRenderer.invoke('analytics:getExcludeCandidates'),

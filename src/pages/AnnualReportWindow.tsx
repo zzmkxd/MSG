@@ -8,6 +8,7 @@ import {
   updateBackgroundTask
 } from '../services/backgroundTaskMonitor'
 import './AnnualReportWindow.scss'
+import ReportHeatmap from '../components/ReportHeatmap'
 
 interface TopContact {
   username: string
@@ -634,6 +635,14 @@ function AnnualReportWindow() {
               <DecodeText value={(reportData.midnightKing?.count || 0).toLocaleString()} active={currentScene === 2} />
             </strong>条消息在那些无人知晓的夜里，代替星光照亮了彼此”
           </div>
+        </div>
+        {/* 活跃热力图：直接用后端已算好的 activityHeatmap.data（7×24，星期×小时），
+            这里只做渲染，不得重新遍历消息库（年报页本身已需 8.7s） */}
+        <div className="reveal-wrap" style={{ width: 'min(900px, 76vw)', marginTop: '1.5vh', pointerEvents: 'auto' }}>
+          <div className="reveal-inner serif delay-2" style={{ textAlign: 'center', color: 'var(--c-text-muted)', fontSize: '0.95rem', letterSpacing: '0.08em', marginBottom: '4px' }}>
+            一周之中，你习惯在这些时刻出现
+          </div>
+          <ReportHeatmap data={reportData.activityHeatmap?.data || []} />
         </div>
       </div>
 

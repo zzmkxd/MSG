@@ -315,6 +315,7 @@ async function runWeliveEngine() {
     if (format === 'weclone') return '.csv'
     if (format === 'html') return '.html'
     if (format === 'sql') return '.sql'
+    if (format === 'docx') return '.docx'
     return '.json'
   }
   const resolveFinalOutputPath = async (sessionId: string) => {
@@ -466,6 +467,9 @@ async function runWeliveEngine() {
       if (format === 'sql') {
         return await exportService.orchestrator.exportSessionToSql(sessionId, outputPath, options, queueProgress, taskControl)
       }
+      if (format === 'docx') {
+        return await exportService.orchestrator.exportSessionToDocx(sessionId, outputPath, options, queueProgress, taskControl)
+      }
       return await exportService.orchestrator.exportSessionToChatLab(sessionId, outputPath, options, queueProgress, taskControl)
     }
 
@@ -549,6 +553,8 @@ async function runLegacyEngine() {
       result = await exportService.orchestrator.exportSessionToHtml(sessionId, outputPath, options, onProgress, taskControl)
     } else if (format === 'sql') {
       result = await exportService.orchestrator.exportSessionToSql(sessionId, outputPath, options, onProgress, taskControl)
+    } else if (format === 'docx') {
+      result = await exportService.orchestrator.exportSessionToDocx(sessionId, outputPath, options, onProgress, taskControl)
     } else {
       result = await exportService.orchestrator.exportSessionToChatLab(sessionId, outputPath, options, onProgress, taskControl)
     }

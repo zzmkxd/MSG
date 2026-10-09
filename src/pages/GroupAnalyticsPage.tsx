@@ -38,7 +38,7 @@ interface GroupMessageRank {
 }
 
 type AnalysisFunction = 'members' | 'memberMessages' | 'memberAnalytics' | 'ranking' | 'activeHours' | 'mediaStats'
-type MemberExportFormat = 'chatlab' | 'chatlab-jsonl' | 'json' | 'arkme-json' | 'html' | 'markdown' | 'txt' | 'excel' | 'weclone'
+type MemberExportFormat = 'chatlab' | 'chatlab-jsonl' | 'json' | 'arkme-json' | 'html' | 'markdown' | 'txt' | 'excel' | 'weclone' | 'docx'
 
 interface MemberMessageExportOptions {
   format: MemberExportFormat
@@ -235,7 +235,8 @@ function GroupAnalyticsPage() {
     { value: 'chatlab-jsonl', label: 'ChatLab JSONL', desc: '流式格式，适合大量消息' },
     { value: 'html', label: 'HTML', desc: '网页格式，可直接浏览' },
     { value: 'markdown', label: 'Markdown', desc: '支持文本、图片与链接，适合 AI 场景' },
-    { value: 'weclone', label: 'WeClone CSV', desc: 'WeClone 兼容字段格式（CSV）' }
+    { value: 'weclone', label: 'WeClone CSV', desc: 'WeClone 兼容字段格式（CSV）' },
+    { value: 'docx', label: 'DOCX', desc: 'Word 文档，聊天气泡排版' }
   ]), [])
   const displayNameOptions = useMemo<Array<{
     value: MemberMessageExportOptions['displayNamePreference']

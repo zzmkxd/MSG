@@ -9,7 +9,16 @@
     "dev": "node scripts/prepare-electron-runtime.cjs && vite",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/clean-dist-electron.cjs && tsc && vite build && electron-builder",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke-verify.cjs",
+    "smoke:quick": "node scripts/smoke-verify.cjs --quick",
+    "smoke:wechat": "node scripts/smoke-verify.cjs --wechat",
+    "smoke:pack": "node scripts/smoke-verify.cjs --pack",
+    "smoke:all": "node scripts/smoke-verify.cjs --all",
+    "verify:pack-config": "node scripts/smoke-pack-config.cjs",
+    "verify:native": "node scripts/verify-native-modules.cjs",
+    "verify:wcdb": "node scripts/verify-wcdb-link.cjs",
+    "verify:inject": "node scripts/verify-wechat-inject.cjs"
   },
   "dependencies": {
     "@hicccc77/electron-liquid-glass": "^0.3.0",

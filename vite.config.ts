@@ -113,6 +113,10 @@ export default defineConfig({
                 'koffi',
                 'exceljs',
                 'silk-wasm',
+                // jieba-wasm 的 nodejs 产物用 __dirname 定位 jieba_rs_wasm_bg.wasm；
+                // 一旦被 bundle 进 dist-electron/main.js，__dirname 就指错、启动时
+                // readFileSync 直接抛错。必须保持 external，运行时从 node_modules 解析。
+                'jieba-wasm',
                 // 原生 .node 二进制不可打包，运行时从 asarUnpack 目录解析
                 '@hicccc77/electron-liquid-glass'
               ]

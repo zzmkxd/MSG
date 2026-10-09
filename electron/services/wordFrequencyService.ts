@@ -57,12 +57,10 @@ function toMappedCounter(items: string[]): Record<string, number> {
   return counter
 }
 
-function reindexArray<T>(arr: T[], length: number, fill: T): T[] {
-  const result: T[] = []
-  for (let i = 0; i < length; i++) {
-    result[i] = arr[i] ?? fill
+function mergeCounters(target: Record<string, number>, source: Record<string, number>): void {
+  for (const [key, value] of Object.entries(source)) {
+    target[key] = (target[key] || 0) + value
   }
-  return result
 }
 
 // ── 核心计算 ────────────────────────────────────────────────────────────────────
@@ -139,4 +137,117 @@ export function topFreq(freq: Record<string, number>, n: number = 100): [string,
   return Object.entries(freq)
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
+}
+
+// ── 接线层：DB 行 → MessageRecord 适配器 + 分块编排入口 ──────────────────────────
+//
+// 断点说明（原实现为零引用的孤立服务）：
+//   computeWordFrequency 要的是已切好 date/hour/month/weekday 的 MessageRecord，
+//   而库里取出来的是原始行（只有 create_time 时间戳 + message_content）。
+//   中间那层适配器原本全项目不存在 —— 下面这段就是它。
+
+/** 文本类消息的 localType（与 analyticsService 的 textTypes 口径一致） */
+export const TEXT_LOCAL_TYPES = [1, 244813135921]
+
+/**
+ * 把一行消息记录适配成 MessageRecord。
+ * 时间派生与 analyticsService 的 monthKey/dayKey 保持同一写法（本地时区）。
+ * weekday 契约见 MessageRecord 注释：0=周一 … 6=周日（JS getDay() 是 0=周日，故此处换算）。
+ */
+export function rowToMessageRecord(row: Record<string, any>): MessageRecord | null {
+  const rawContent =
+    row?.StrContent ??
+    row?.message_content ??
+    row?.messageContent ??
+    row?.msg_content ??
+    row?.content ??
+    ''
+  const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
+
+  const rawTime = row?.create_time ?? row?.createTime ?? row?.create_time_ms ?? 0
+  const parsed = parseInt(String(rawTime), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  const seconds = parsed > 1e12 ? Math.floor(parsed / 1000) : parsed
+
+  const date = new Date(seconds * 1000)
+  const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  return {
+    content,
+    date: `${month}-${String(date.getDate()).padStart(2, '0')}`,
+    hour: date.getHours(),
+    month,
+    weekday: (date.getDay() + 6) % 7
+  }
+}
+
+/** 供 IPC 返回的紧凑结果：不含 lengthSeries（10 万条序列没有展示价值，只会撑爆 IPC 载荷） */
+export interface WordFrequencySummary {
+  totalMessages: number
+  totalChars: number
+  avgLength: number
+  dateRange: [string, string] | null
+  dailyCounts: Record<string, number>
+  hourlyCounts: number[]
+  monthlyCounts: Record<string, number>
+  weekdayCounts: number[]
+  topWords: Array<{ phrase: string; count: number }>
+  topEmojis: Array<{ phrase: string; count: number }>
+  distinctWords: number
+}
+
+/**
+ * 分块调用 computeWordFrequency 并合并结果。
+ *
+ * 为什么不直接 computeWordFrequency(全部 records)：
+ * 它内部把整个语料拼成一个字符串做一次 cut()，10 万条消息会得到 5MB 级输入，
+ * 单次调用会长时间占住主进程且内存尖峰很高。分块后每块只喂几千条，
+ * 并在块间 setImmediate 让出事件循环，主进程仍能处理窗口事件。
+ * 分词结果与整体调用等价：原实现用 ' ' 拼接语料，词不会跨消息边界。（已注释固定该前提）
+ */
+export async function computeWordFrequencySummary(
+  records: MessageRecord[],
+  chunkSize = 2000
+): Promise<WordFrequencySummary> {
+  const dailyCounts: Record<string, number> = {}
+  const monthlyCounts: Record<string, number> = {}
+  const wordFreq: Record<string, number> = {}
+  const emojiFreq: Record<string, number> = {}
+  const hourlyCounts = new Array(24).fill(0)
+  const weekdayCounts = new Array(7).fill(0)
+  let totalMessages = 0
+  let totalChars = 0
+  let minDate: string | null = null
+  let maxDate: string | null = null
+
+  const size = Math.max(1, chunkSize)
+  for (let offset = 0; offset < records.length; offset += size) {
+    const stats = computeWordFrequency(records.slice(offset, offset + size))
+    totalMessages += stats.totalMessages
+    totalChars += stats.totalChars
+    mergeCounters(dailyCounts, stats.dailyCounts)
+    mergeCounters(monthlyCounts, stats.monthlyCounts)
+    mergeCounters(wordFreq, stats.wordFreq)
+    mergeCounters(emojiFreq, stats.emojiFreq)
+    for (let i = 0; i < 24; i++) hourlyCounts[i] += stats.hourlyCounts[i] || 0
+    for (let i = 0; i < 7; i++) weekdayCounts[i] += stats.weekdayCounts[i] || 0
+    if (stats.dateRange) {
+      if (!minDate || stats.dateRange[0] < minDate) minDate = stats.dateRange[0]
+      if (!maxDate || stats.dateRange[1] > maxDate) maxDate = stats.dateRange[1]
+    }
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  return {
+    totalMessages,
+    totalChars,
+    avgLength: totalMessages > 0 ? Math.round((totalChars / totalMessages) * 10) / 10 : 0,
+    dateRange: minDate && maxDate ? [minDate, maxDate] : null,
+    dailyCounts,
+    hourlyCounts,
+    monthlyCounts,
+    weekdayCounts,
+    topWords: topFreq(wordFreq, 100).map(([phrase, count]) => ({ phrase, count })),
+    topEmojis: topFreq(emojiFreq, 30).map(([phrase, count]) => ({ phrase, count })),
+    distinctWords: Object.keys(wordFreq).length
+  }
 }

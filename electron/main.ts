@@ -1052,7 +1052,15 @@ const getPlatformIconName = (): string => {
 const resolveAppIconPath = (): string => {
   const iconName = getPlatformIconName()
   if (!process.env.VITE_DEV_SERVER_URL) {
-    return join(process.resourcesPath, iconName)
+    const packagedPath = join(process.resourcesPath, iconName)
+    if (existsSync(packagedPath)) return packagedPath
+    // 未打包且未跑 dev server（直接 electron.exe . 启动）时，process.resourcesPath 指向
+    // node_modules/electron/dist/resources —— 那里没有本项目图标，托盘会创建失败。
+    // 回退到构建产物与源目录里实际存在的图标；打包态在上面已提前返回，不受影响。
+    for (const candidate of [join(__dirname, `../dist/${iconName}`), join(__dirname, `../public/${iconName}`)]) {
+      if (existsSync(candidate)) return candidate
+    }
+    return packagedPath
   }
   if (process.platform === 'darwin') {
     return join(__dirname, '../resources/icons/macos/icon.icns')
@@ -3903,6 +3911,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('analytics:getSelfSentDailyDistribution', async (_, beginTimestamp?: number, endTimestamp?: number, force?: boolean) => {
     return analyticsService.getSelfSentDailyDistribution(beginTimestamp, endTimestamp, force)
+  })
+
+  ipcMain.handle('analytics:getMessageLengthHistogram', async (_, beginTimestamp?: number, endTimestamp?: number, force?: boolean) => {
+    return analyticsService.getMessageLengthHistogram(beginTimestamp, endTimestamp, force)
+  })
+
+  ipcMain.handle('analytics:getWordFrequency', async (_, sessionId?: string, force?: boolean) => {
+    return analyticsService.getWordFrequency(sessionId, force)
   })
 
   ipcMain.handle('analytics:getExcludedUsernames', async () => {

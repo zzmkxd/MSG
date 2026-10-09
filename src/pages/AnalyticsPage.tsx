@@ -12,6 +12,7 @@ import {
 } from '../services/backgroundTaskMonitor'
 import './AnalyticsPage.scss'
 import { Avatar } from '../components/Avatar'
+import ReportWordCloud from '../components/ReportWordCloud'
 import ChatAnalysisHeader from '../components/ChatAnalysisHeader'
 
 interface ExcludeCandidate {
@@ -42,11 +43,15 @@ function AnalyticsPage() {
     rankings,
     timeDistribution,
     selfSentDailyDistribution,
+    messageLengthHistogram,
+    wordFrequency,
     isLoaded,
     setStatistics,
     setRankings,
     setTimeDistribution,
     setSelfSentDailyDistribution,
+    setMessageLengthHistogram,
+    setWordFrequency,
     markLoaded,
     clearCache
   } = useAnalyticsStore()
@@ -72,7 +77,9 @@ function AnalyticsPage() {
       !forceRefresh &&
       currentAnalyticsState.statistics &&
       currentAnalyticsState.timeDistribution &&
-      currentAnalyticsState.selfSentDailyDistribution
+      currentAnalyticsState.selfSentDailyDistribution &&
+      currentAnalyticsState.messageLengthHistogram &&
+      currentAnalyticsState.wordFrequency
     ) return
     const taskId = registerBackgroundTask({
       sourcePage: 'analytics',
@@ -163,6 +170,46 @@ function AnalyticsPage() {
       if (selfSentDailyResult.success && selfSentDailyResult.data) {
         setSelfSentDailyDistribution(selfSentDailyResult.data)
       }
+      setLoadingStatus('正在统计消息长度分布...')
+      updateBackgroundTask(taskId, {
+        detail: '正在统计消息长度分布',
+        progressText: '消息长度'
+      })
+      const lengthHistogramResult = await window.electronAPI.analytics.getMessageLengthHistogram(0, 0, forceRefresh)
+      if (isBackgroundTaskCancelRequested(taskId)) {
+        finishBackgroundTask(taskId, 'canceled', {
+          detail: '已停止后续加载，消息长度分布结果未继续写入'
+        })
+        setIsLoading(false)
+        return
+      }
+      if (lengthHistogramResult.success && lengthHistogramResult.data) {
+        setMessageLengthHistogram(lengthHistogramResult.data)
+      }
+      setLoadingStatus('正在统计词频...')
+      updateBackgroundTask(taskId, {
+        detail: '正在统计词频',
+        progressText: '词频'
+      })
+      const wordFrequencyResult = await window.electronAPI.analytics.getWordFrequency(undefined, forceRefresh)
+      if (isBackgroundTaskCancelRequested(taskId)) {
+        finishBackgroundTask(taskId, 'canceled', {
+          detail: '已停止后续加载，词频结果未继续写入'
+        })
+        setIsLoading(false)
+        return
+      }
+      if (wordFrequencyResult.success && wordFrequencyResult.data) {
+        const wf = wordFrequencyResult.data
+        setWordFrequency({
+          scannedMessages: wf.scannedMessages,
+          textMessages: wf.textMessages,
+          distinctWords: wf.summary.distinctWords,
+          avgLength: wf.summary.avgLength,
+          topWords: wf.summary.topWords,
+          topEmojis: wf.summary.topEmojis
+        })
+      }
       markLoaded()
       finishBackgroundTask(taskId, 'completed', {
         detail: '分析看板数据加载完成',
@@ -177,7 +224,7 @@ function AnalyticsPage() {
       setIsLoading(false)
       if (removeListener) removeListener()
     }
-  }, [markLoaded, setRankings, setSelfSentDailyDistribution, setStatistics, setTimeDistribution])
+  }, [markLoaded, setRankings, setSelfSentDailyDistribution, setStatistics, setTimeDistribution, setMessageLengthHistogram, setWordFrequency])
 
   const location = useLocation()
 
@@ -477,6 +524,46 @@ function AnalyticsPage() {
     }
   }
 
+  // 防御持久化旧状态：localStorage 里的 messageLengthHistogram / wordFrequency 可能来自
+  // 更早的构建（缺 scannedMessages 等字段），直接相减会渲染出 NaN。
+  const nonTextMessageCount = (() => {
+    const scanned = messageLengthHistogram?.scannedMessages
+    const total = messageLengthHistogram?.totalMessages
+    if (typeof scanned !== 'number' || typeof total !== 'number') return null
+    return Math.max(0, scanned - total)
+  })()
+  const wordScannedMessages = (() => {
+    const value = wordFrequency?.scannedMessages
+    return typeof value === 'number' ? value : null
+  })()
+
+  // 消息长度直方图：x 轴 label 一律用后端返回的 buckets（桶边界只由后端维护一份，
+  // 前端不得再写一份常量，否则会出现「各桶之和与总数对不上」的假象）
+  const getMessageLengthOption = () => {
+    if (!messageLengthHistogram) return {}
+    const labels = messageLengthHistogram.buckets.map(b => b.label)
+    const counts = messageLengthHistogram.buckets.map(b => b.count)
+    return {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          const item = Array.isArray(params) ? params[0] : params
+          const index = item?.dataIndex ?? 0
+          const bucket = messageLengthHistogram.buckets[index]
+          const count = bucket?.count ?? 0
+          const share = messageLengthHistogram.totalMessages > 0
+            ? (count / messageLengthHistogram.totalMessages * 100).toFixed(2)
+            : '0.00'
+          const range = bucket?.max === null ? `${bucket?.min}+ 字符` : `${bucket?.min}-${bucket?.max} 字符`
+          return `${range}<br/>${count} 条（${share}%）`
+        }
+      },
+      xAxis: { type: 'category', data: labels, name: '字符数' },
+      yAxis: { type: 'value' },
+      series: [{ type: 'bar', data: counts, itemStyle: { color: '#07c160', borderRadius: [4, 4, 0, 0] } }]
+    }
+  }
+
   const getSelfSentDailyRatioData = () => {
     const entries = Object.entries(selfSentDailyDistribution?.dailyDistribution || {})
       .sort(([a], [b]) => a.localeCompare(b))
@@ -735,6 +822,40 @@ function AnalyticsPage() {
             <div className="chart-card"><h3>消息类型分布</h3><ReactECharts option={getTypeChartOption()} style={{ height: 300 }} /></div>
             <div className="chart-card"><h3>发送/接收比例</h3><ReactECharts option={getSendReceiveOption()} style={{ height: 300 }} /></div>
             <div className="chart-card wide"><h3>每小时消息分布</h3><ReactECharts option={getHourlyOption()} style={{ height: 250 }} /></div>
+            <div className="chart-card wide">
+              <div className="chart-title-row">
+                <h3>消息长度分布</h3>
+                <span>
+                  {messageLengthHistogram
+                    ? `文本 ${formatNumber(messageLengthHistogram.totalMessages)} 条 · 平均 ${messageLengthHistogram.avgLength} 字 · 最长 ${formatNumber(messageLengthHistogram.maxLength)} 字`
+                    : ''}
+                </span>
+              </div>
+              <div className="chart-note">
+                仅统计文本类消息的字符数（emoji 按 2 计）；各桶之和 = 文本消息数
+                {nonTextMessageCount !== null ? `，另有 ${formatNumber(nonTextMessageCount)} 条非文本消息未计入` : ''}
+              </div>
+              <ReactECharts option={getMessageLengthOption()} style={{ height: 280 }} />
+            </div>
+            <div className="chart-card wide">
+              <div className="chart-title-row">
+                <h3>高频词云</h3>
+                <span>
+                  {wordFrequency
+                    ? `分词 ${formatNumber(wordFrequency.textMessages)} 条文本 · 不同词 ${formatNumber(wordFrequency.distinctWords)} 个 · 平均 ${wordFrequency.avgLength} 字`
+                    : ''}
+                </span>
+              </div>
+              <div className="chart-note">
+                仅对文本类消息分词（不含 XML 类消息），已过滤中文停用词；扫描到的消息总数
+                {wordScannedMessages !== null ? ` ${formatNumber(wordScannedMessages)} 条` : ' —'}（可与上方「总消息数」对照）
+              </div>
+              {wordFrequency && wordFrequency.topWords.length > 0 ? (
+                <ReportWordCloud words={wordFrequency.topWords} />
+              ) : (
+                <div className="chart-note">暂无可用于分词的文本消息</div>
+              )}
+            </div>
             <div className="chart-card wide self-sent-ratio-card">
               <div className="chart-title-row">
                 <h3>每日自身发送强度比例</h3>

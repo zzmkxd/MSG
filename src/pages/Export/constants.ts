@@ -50,7 +50,8 @@ export const formatOptions: Array<{ value: TextExportFormat; label: string; desc
   { value: 'txt', label: 'TXT', desc: '纯文本，通用格式' },
   { value: 'excel', label: 'Excel', desc: '电子表格，适合统计分析' },
   { value: 'weclone', label: 'WeClone CSV', desc: 'WeClone 兼容字段格式（CSV）' },
-  { value: 'sql', label: 'PostgreSQL', desc: '数据库脚本，便于导入到数据库' }
+  { value: 'sql', label: 'PostgreSQL', desc: '数据库脚本，便于导入到数据库' },
+  { value: 'docx', label: 'DOCX', desc: 'Word 文档，聊天气泡排版' }
 ]
 
 // ─── Display name options ────────────────────────────────────

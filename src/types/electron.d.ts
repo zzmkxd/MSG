@@ -1,4 +1,4 @@
-﻿import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
+import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
 export interface SessionChatWindowOpenOptions {
   source?: 'chat' | 'export'
@@ -1129,6 +1129,43 @@ export interface ElectronAPI {
       }
       error?: string
     }>
+    getMessageLengthHistogram: (beginTimestamp?: number, endTimestamp?: number, force?: boolean) => Promise<{
+      success: boolean
+      data?: {
+        buckets: Array<{ label: string; min: number; max: number | null; count: number }>
+        totalMessages: number
+        scannedMessages: number
+        emptyMessages: number
+        textMessages: number
+        avgLength: number
+        maxLength: number
+        beginTimestamp: number
+        endTimestamp: number
+      }
+      error?: string
+    }>
+    getWordFrequency: (sessionId?: string, force?: boolean) => Promise<{
+      success: boolean
+      data?: {
+        sessionId: string | null
+        scannedMessages: number
+        textMessages: number
+        summary: {
+          totalMessages: number
+          totalChars: number
+          avgLength: number
+          dateRange: [string, string] | null
+          dailyCounts: Record<string, number>
+          hourlyCounts: number[]
+          monthlyCounts: Record<string, number>
+          weekdayCounts: number[]
+          topWords: Array<{ phrase: string; count: number }>
+          topEmojis: Array<{ phrase: string; count: number }>
+          distinctWords: number
+        }
+      }
+      error?: string
+    }>
     getExcludedUsernames: () => Promise<{
       success: boolean
       data?: string[]
@@ -1709,7 +1746,7 @@ export interface ElectronAPI {
 }
 
 export interface ExportOptions {
-  format: 'chatlab' | 'chatlab-jsonl' | 'json' | 'arkme-json' | 'html' | 'markdown' | 'txt' | 'excel' | 'weclone' | 'sql'
+  format: 'chatlab' | 'chatlab-jsonl' | 'json' | 'arkme-json' | 'html' | 'markdown' | 'txt' | 'excel' | 'weclone' | 'sql' | 'docx'
   contentType?: 'text' | 'voice' | 'image' | 'video' | 'emoji' | 'file'
   dateRange?: { start: number; end: number } | null
   senderUsername?: string

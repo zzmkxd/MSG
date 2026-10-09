@@ -1,5 +1,12 @@
 import { ConfigService } from './config'
 import { wcdbService } from './wcdbService'
+import {
+  computeWordFrequencySummary,
+  rowToMessageRecord,
+  TEXT_LOCAL_TYPES,
+  type MessageRecord,
+  type WordFrequencySummary
+} from './wordFrequencyService'
 import { join } from 'path'
 import { readFile, writeFile, rm } from 'fs/promises'
 import { app } from 'electron'
@@ -48,11 +55,89 @@ export interface ContactRanking {
   lastMessageTime: number | null
 }
 
+export interface MessageLengthBucket {
+  label: string
+  min: number
+  max: number | null
+  count: number
+}
+
+export interface MessageLengthHistogram {
+  buckets: MessageLengthBucket[]
+  /** 参与分桶的消息数（文本类，== 各桶之和） */
+  totalMessages: number
+  /** 扫描到的全部消息（任意类型），用于与「总消息数」对照 */
+  scannedMessages: number
+  /** 内容为空的文本消息数 */
+  emptyMessages: number
+  /** 文本类消息数（localType 1 / 244813135921），与 getOverallStatistics 同口径 */
+  textMessages: number
+  /** 文本消息的平均字符数 */
+  avgLength: number
+  /** 最长文本消息字符数 */
+  maxLength: number
+  beginTimestamp: number
+  endTimestamp: number
+}
+
+/**
+ * 词频统计结果。
+ * `scannedMessages` 与 `textMessages` 分开返回，是为了让前端的交叉校验可见：
+ *   scannedMessages  → 应与同页「总消息数」一致（全部类型）
+ *   textMessages     → 应与同页「文本类消息数」一致（= summary.totalMessages，参与分词的那批）
+ * 两者不一致时属于取数口径问题，不允许用其中任一个去「凑」另一个。
+ */
+export interface WordFrequencyResult {
+  /** null 表示统计范围为全部私聊会话 */
+  sessionId: string | null
+  scannedMessages: number
+  textMessages: number
+  summary: WordFrequencySummary
+}
+
+/**
+ * 一次会话内容扫描的全部产物（长度分桶 + 计数 + 文本消息记录）。
+ * 由 getSessionContentScan 产出，被长度直方图与词频统计共用。
+ */
+interface SessionContentScan {
+  /** 与 MESSAGE_LENGTH_BUCKETS 一一对应（只统计文本类消息） */
+  bucketCounts: number[]
+  /** 扫描到的全部消息（任意类型） */
+  scannedMessages: number
+  /** 内容为空的文本消息数 */
+  emptyMessages: number
+  /** 文本类消息数（TEXT_LOCAL_TYPES） */
+  textMessages: number
+  /** 文本消息长度合计 */
+  lengthSum: number
+  /** 最长文本消息长度 */
+  maxLength: number
+  /** 文本类消息的适配结果，供分词使用 */
+  records: MessageRecord[]
+}
+
+/**
+ * 消息长度分桶定义 —— **单一事实来源**：
+ * SQL/统计侧与前端 x 轴都不得各自维护一份，前端一律直接渲染接口返回的 label，
+ * 否则会出现「各桶之和与总数对不上」的假象。
+ */
+const MESSAGE_LENGTH_BUCKETS: Array<{ label: string; min: number; max: number | null }> = [
+  { label: '空', min: 0, max: 0 },
+  { label: '1-10', min: 1, max: 10 },
+  { label: '11-20', min: 11, max: 20 },
+  { label: '21-40', min: 21, max: 40 },
+  { label: '41-80', min: 41, max: 80 },
+  { label: '81-160', min: 81, max: 160 },
+  { label: '161+', min: 161, max: null }
+]
+
 class AnalyticsService {
   private configService: ConfigService
   private fallbackAggregateCache: { key: string; data: any; updatedAt: number } | null = null
   private aggregateCache: { key: string; data: any; updatedAt: number } | null = null
   private selfSentDailyCache: { key: string; data: SelfSentDailyDistribution; updatedAt: number } | null = null
+  private wordFrequencyCache: { key: string; data: WordFrequencyResult; updatedAt: number } | null = null
+  private contentScanCache: { key: string; data: SessionContentScan; updatedAt: number } | null = null
   private aggregatePromise: { key: string; promise: Promise<{ success: boolean; data?: any; source?: string; error?: string }> } | null = null
 
   constructor() {
@@ -659,11 +744,17 @@ class AnalyticsService {
       const emojiMessages = d.typeCounts[47] || 0
       const otherMessages = d.total - textMessages - imageMessages - voiceMessages - videoMessages - emojiMessages
 
-      // 估算活跃天数（按月分布估算或从日期列表中提取，由于 C++ 只返回了月份映射，
-      // 我们这里暂时返回月份数作为参考，或者如果需要精确天数，原生层需要返回 Set 大小）
-      // 为了性能，我们先用月份数，或者后续再优化 C++ 返回 activeDays 计数。
-      // 当前 C++ 逻辑中 gs.monthly.size() 就是活跃月份。
-      const activeMonths = Object.keys(d.monthly).length
+      // 活跃天数 = 有消息的自然日去重计数（键形态 YYYY-MM-DD）。
+      // 两条聚合路径都会产出 d.daily，因此这里不需要为它单独再遍历一次数据库：
+      //   - 游标回退路径：computeAggregateByCursor 的 dayKey（dayKey = 上文 monthKey + '-' + 日）
+      //   - 原生路径：wcdb_get_aggregate_stats 返回的 JSON 自带 daily
+      //     （本机真实库实测：daily 553 个键、键值合计 == total == 100746）
+      // 与 groupAnalyticsService / insightProfileService 的 activeDays（Set.size）口径一致。
+      const dailyCounts = d.daily && typeof d.daily === 'object' ? d.daily : null
+      const activeDays = dailyCounts ? Object.keys(dailyCounts).length : 0
+      if (d.total > 0 && activeDays === 0) {
+        console.warn('[analytics] 聚合结果缺少 daily 明细，活跃天数无法精确计算（已降级为 0）')
+      }
 
       return {
         success: true,
@@ -679,7 +770,7 @@ class AnalyticsService {
           receivedMessages: d.received,
           firstMessageTime: d.firstTime || null,
           lastMessageTime: d.lastTime || null,
-          activeDays: activeMonths * 20, // 粗略估算，或改为返回活跃月份
+          activeDays,
           messageTypeCounts: d.typeCounts
         }
       }
@@ -792,6 +883,212 @@ class AnalyticsService {
     }
   }
 
+  /**
+   * 消息长度直方图。
+   *
+   * 取数路线：**游标**（iterateSessionMessages），不是 SQL。理由：
+   *  - 与 getOverallStatistics / getTimeDistribution 使用同一份会话集与同一套行字段解析，
+   *    所以「各桶之和 == 总消息数」是构造上成立的，而不是巧合；
+   *  - 不拼 SQL ⇒ 不引入注入面（wcdb_exec_query 在本仓库无法做参数绑定，见 wcdbCore.ts:4064）；
+   *  - 代价是一次全量游标遍历（本机 10 万条量级为秒级），故加 5 分钟内存缓存。
+   *
+   * 长度口径：只统计**文本类消息**（localType 1 / 244813135921）的原始内容字符数，
+   * 故「各桶之和 == totalMessages == 文本类消息数」，与页面统计口径可直接对照；
+   * 非文本消息（图片/语音/XML 类）长度没有可比性，单独用 scannedMessages 报告总数。
+   * 字符数用 JS `String.length`（UTF-16 码元），与 insightProfileService 的 content.length 一致，
+   * emoji 按 2 计。
+   */
+  async getMessageLengthHistogram(
+    beginTimestamp = 0,
+    endTimestamp = 0,
+    force = false
+  ): Promise<{ success: boolean; data?: MessageLengthHistogram; error?: string }> {
+    try {
+      const conn = await this.ensureConnected()
+      if (!conn.success || !conn.cleanedWxid) return { success: false, error: conn.error }
+
+      const sessionInfo = await this.getPrivateSessions(conn.cleanedWxid)
+      if (sessionInfo.usernames.length === 0) {
+        return { success: false, error: '未找到消息会话' }
+      }
+
+      const scan = await this.getSessionContentScan(sessionInfo.usernames, beginTimestamp, endTimestamp, force, '正在统计消息长度分布')
+
+      const data: MessageLengthHistogram = {
+        buckets: MESSAGE_LENGTH_BUCKETS.map((bucket, index) => ({
+          label: bucket.label,
+          min: bucket.min,
+          max: bucket.max,
+          count: scan.bucketCounts[index]
+        })),
+        totalMessages: scan.textMessages,
+        scannedMessages: scan.scannedMessages,
+        emptyMessages: scan.emptyMessages,
+        textMessages: scan.textMessages,
+        avgLength: scan.textMessages > 0 ? Number((scan.lengthSum / scan.textMessages).toFixed(2)) : 0,
+        maxLength: scan.maxLength,
+        beginTimestamp,
+        endTimestamp
+      }
+
+      return { success: true, data }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  /**
+   * 会话内容扫描 —— 消息长度直方图与词频共用同一次游标遍历。
+   *
+   * 两个功能都要逐条读 message_content，各自扫一遍等于把 10 万条消息读两次；
+   * 这里把「扫描 + 分桶 + 适配 MessageRecord」收敛到一处，按会话集/时间范围缓存 5 分钟，
+   * 谁先调用谁触发扫描，后调用的直接复用。
+   */
+  private async getSessionContentScan(
+    sessionIds: string[],
+    beginTimestamp: number,
+    endTimestamp: number,
+    force: boolean,
+    progressLabel: string
+  ): Promise<SessionContentScan> {
+    const cacheKey = this.buildAggregateCacheKey(sessionIds, beginTimestamp, endTimestamp)
+    if (force) this.contentScanCache = null
+    if (
+      !force &&
+      this.contentScanCache &&
+      this.contentScanCache.key === cacheKey &&
+      Date.now() - this.contentScanCache.updatedAt < 5 * 60 * 1000
+    ) {
+      return this.contentScanCache.data
+    }
+
+    const { BrowserWindow } = require('electron')
+    const win = BrowserWindow.getAllWindows()[0]
+
+    const scan: SessionContentScan = {
+      bucketCounts: new Array<number>(MESSAGE_LENGTH_BUCKETS.length).fill(0),
+      scannedMessages: 0,
+      emptyMessages: 0,
+      textMessages: 0,
+      lengthSum: 0,
+      maxLength: 0,
+      records: []
+    }
+
+    for (let index = 0; index < sessionIds.length; index++) {
+      await this.iterateSessionMessages(sessionIds[index], (row) => {
+        const createTime = this.getRowCreateTime(row)
+        if (!createTime) return
+        if (beginTimestamp > 0 && createTime < beginTimestamp) return
+        if (endTimestamp > 0 && createTime > endTimestamp) return
+
+        const localType = parseInt(row.local_type || row.type || '1', 10)
+        const isText = TEXT_LOCAL_TYPES.includes(localType)
+        scan.scannedMessages += 1
+        if (!isText) return
+
+        scan.textMessages += 1
+
+        const rawContent =
+          row.StrContent ??
+          row.message_content ??
+          row.messageContent ??
+          row.msg_content ??
+          row.content ??
+          ''
+        const length = String(rawContent).length
+
+        if (length === 0) scan.emptyMessages += 1
+        scan.lengthSum += length
+        if (length > scan.maxLength) scan.maxLength = length
+
+        for (let i = 0; i < MESSAGE_LENGTH_BUCKETS.length; i++) {
+          const bucket = MESSAGE_LENGTH_BUCKETS[i]
+          if (length >= bucket.min && (bucket.max === null || length <= bucket.max)) {
+            scan.bucketCounts[i] += 1
+            break
+          }
+        }
+
+        const record = rowToMessageRecord(row)
+        if (record) scan.records.push(record)
+      }, beginTimestamp, endTimestamp)
+
+      if (sessionIds.length > 1) {
+        this.setProgress(
+          win,
+          `${progressLabel}... (${index + 1}/${sessionIds.length} 个会话)`,
+          Math.floor(((index + 1) / sessionIds.length) * 60)
+        )
+      }
+    }
+
+    this.contentScanCache = { key: cacheKey, data: scan, updatedAt: Date.now() }
+    return scan
+  }
+
+  /**
+   * 词频/词云取数。
+   *
+   * 接线说明（原 wordFrequencyService 是零引用孤立服务，断点不在 IPC 而在适配器）：
+   * 本方法负责「取会话消息 → rowToMessageRecord 适配 → 分词统计」，三者中
+   * 适配器与分词入口都在 wordFrequencyService 内（rowToMessageRecord /
+   * computeWordFrequencySummary），这里只做编排，避免把 DB 细节塞进纯统计模块。
+   *
+   * 只对文本类消息（TEXT_LOCAL_TYPES）分词：其他类型的内容是 XML（appmsg/msg/...），
+   * 进去只会把标签名变成高频词。scannedMessages 仍统计全部类型，便于与页面总数对照。
+   */
+  async getWordFrequency(
+    sessionId?: string,
+    force = false
+  ): Promise<{ success: boolean; data?: WordFrequencyResult; error?: string }> {
+    try {
+      const conn = await this.ensureConnected()
+      if (!conn.success || !conn.cleanedWxid) return { success: false, error: conn.error }
+
+      const target = String(sessionId || '').trim()
+      let sessionIds: string[]
+      if (target) {
+        sessionIds = [target]
+      } else {
+        const sessionInfo = await this.getPrivateSessions(conn.cleanedWxid)
+        sessionIds = sessionInfo.usernames
+        if (sessionIds.length === 0) return { success: false, error: '未找到消息会话' }
+      }
+
+      const cacheKey = `word-freq-${this.buildAggregateCacheKey(sessionIds, 0, 0)}`
+      if (force) this.wordFrequencyCache = null
+      if (
+        !force &&
+        this.wordFrequencyCache &&
+        this.wordFrequencyCache.key === cacheKey &&
+        Date.now() - this.wordFrequencyCache.updatedAt < 5 * 60 * 1000
+      ) {
+        return { success: true, data: this.wordFrequencyCache.data }
+      }
+
+      const scan = await this.getSessionContentScan(sessionIds, 0, 0, force, '正在统计词频')
+
+      const { BrowserWindow } = require('electron')
+      const win = BrowserWindow.getAllWindows()[0]
+      this.setProgress(win, '正在分词...', 70)
+      const summary = await computeWordFrequencySummary(scan.records)
+
+      const data: WordFrequencyResult = {
+        sessionId: target || null,
+        scannedMessages: scan.scannedMessages,
+        textMessages: scan.textMessages,
+        summary
+      }
+
+      this.wordFrequencyCache = { key: cacheKey, data, updatedAt: Date.now() }
+      this.setProgress(win, '词频统计完成', 100)
+      return { success: true, data }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
   async getSelfSentDailyDistribution(
     beginTimestamp: number = 0,
     endTimestamp: number = 0,
@@ -835,6 +1132,8 @@ class AnalyticsService {
     this.aggregateCache = null
     this.fallbackAggregateCache = null
     this.selfSentDailyCache = null
+    this.wordFrequencyCache = null
+    this.contentScanCache = null
     this.aggregatePromise = null
     try {
       await rm(this.getCacheFilePath(), { force: true })

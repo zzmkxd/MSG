@@ -28,8 +28,17 @@ release/
 # E2E 测试输出（含本地路径，不入库）
 .claude/e2e-key.json
 .claude/e2e-wcdb-electron-result.json
+.claude/smoke-report.json
+.claude/smoke-report.md
 
 # 只读参考项目，不纳入版本控制
 WeFlow_for_archlinux-main/
 WeChatMsg-master/
 ginger_wechat_portrait/
+
+# 可视化验收产物（截图含真实聊天内容，绝不入库）
+audit/
+
+# TypeScript 增量编译信息（composite: true 下 tsc -p tsconfig.node.json 的副产物，
+# 与源码无关，勿入库）
+*.tsbuildinfo

@@ -41,7 +41,8 @@ const exportFormatOptions = [
   { value: 'chatlab', label: 'ChatLab', desc: '标准格式，支持其他软件导入' },
   { value: 'chatlab-jsonl', label: 'ChatLab JSONL', desc: '流式格式，适合大量消息' },
   { value: 'weclone', label: 'WeClone CSV', desc: 'WeClone 兼容字段格式（CSV）' },
-  { value: 'sql', label: 'PostgreSQL', desc: '数据库脚本，便于导入到数据库' }
+  { value: 'sql', label: 'PostgreSQL', desc: '数据库脚本，便于导入到数据库' },
+  { value: 'docx', label: 'DOCX', desc: 'Word 文档，聊天气泡排版' }
 ] as const
 
 const exportExcelColumnOptions = [
