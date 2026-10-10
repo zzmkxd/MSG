@@ -228,8 +228,11 @@ const buildLocationText = (location?: SnsLocation): string => {
 const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: string }) => {
     const [thumbFailed, setThumbFailed] = useState(false)
     const [thumbSrc, setThumbSrc] = useState(card.thumb || '')
+    // 链接图 URL 已过期（公众号/小程序卡片，HTTP 400）：不再重试，展示过期文案
+    const [expired, setExpired] = useState(false)
     const [reloadNonce, setReloadNonce] = useState(0)
     const retryCountRef = useRef(0)
+    const expiredRef = useRef(false)
     const hostname = useMemo(() => {
         try {
             return new URL(card.url).hostname.replace(/^www\./i, '')
@@ -240,6 +243,8 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
 
     useEffect(() => {
         retryCountRef.current = 0
+        expiredRef.current = false
+        setExpired(false)
     }, [card.thumb, thumbKey])
 
     const scheduleRetry = () => {
@@ -252,6 +257,8 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
 
     useEffect(() => {
         const rawThumb = card.thumb || ''
+        // 已判定过期：跳过重试周期内的重新拉取，保持失败态
+        if (expiredRef.current) return
         setThumbFailed(false)
         setThumbSrc(rawThumb)
         if (!rawThumb) return
@@ -270,6 +277,13 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
                         key: thumbKey,
                         error: result.error
                     })
+                    // 链接图 URL 已过期（HTTP 400）：不再重试，直接展示过期文案
+                    if (result.expired) {
+                        expiredRef.current = true
+                        setExpired(true)
+                        setThumbFailed(true)
+                        return
+                    }
                     scheduleRetry()
                     return
                 }
@@ -282,7 +296,7 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
                 }
             } catch {
                 // noop: keep raw thumb fallback
-                scheduleRetry()
+                if (!expiredRef.current) scheduleRetry()
             }
         }
 
@@ -309,6 +323,11 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
                         referrerPolicy="no-referrer"
                         loading="lazy"
                         onError={() => {
+                            // 已判定链接图过期：保持失败态，不再触发重试
+                            if (expiredRef.current) {
+                                setThumbFailed(true)
+                                return
+                            }
                             const rawThumb = card.thumb || ''
                             if (thumbSrc !== rawThumb && rawThumb) {
                                 console.warn('[SnsLinkCard] thumb render failed, fallback raw thumb', {
@@ -336,7 +355,7 @@ const SnsLinkCard = ({ card, thumbKey }: { card: SnsLinkCardData; thumbKey?: str
             </div>
             <div className="link-meta">
                 <div className="link-title">{card.title}</div>
-                <div className="link-url">{hostname}</div>
+                <div className="link-url">{expired ? `链接已过期，无法获取 · ${hostname}` : hostname}</div>
             </div>
             <ChevronRight size={16} className="link-arrow" />
         </button>

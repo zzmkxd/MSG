@@ -212,6 +212,20 @@ export const isVideoUrl = (url: string) => {
     return url.includes('snsvideodownload') || url.includes('video') || url.includes('.mp4')
 }
 
+// 朋友圈链接卡（公众号/小程序卡片）封面图域名：这类 URL 带时效签名，过期后恒定 HTTP 400，
+// 与请求头无关，重试无意义，需直接判定为「链接已过期」。
+const LINK_CARD_IMAGE_HOSTS = ['mmbiz.qpic.cn', 'wxapp.tc.qq.com']
+
+const isLinkCardImageUrl = (url: string): boolean => {
+    if (!url) return false
+    try {
+        const hostname = new URL(url).hostname.toLowerCase()
+        return LINK_CARD_IMAGE_HOSTS.some((host) => hostname === host || hostname.endsWith('.' + host))
+    } catch {
+        return false
+    }
+}
+
 import { Isaac64 } from './isaac64'
 
 const extractVideoKey = (xml: string): string | undefined => {
@@ -1366,7 +1380,7 @@ class SnsService {
 
 
 
-    async proxyImage(url: string, key?: string | number): Promise<{ success: boolean; dataUrl?: string; videoPath?: string; status?: number; error?: string }> {
+    async proxyImage(url: string, key?: string | number): Promise<{ success: boolean; dataUrl?: string; videoPath?: string; status?: number; expired?: boolean; error?: string }> {
         if (!url) return { success: false, error: 'url 不能为空' }
         const cacheKey = `${this.normalizeCacheUrl(url)}|${key ?? ''}`
 
@@ -1411,7 +1425,7 @@ class SnsService {
                 return { success: true, dataUrl }
             }
         }
-        return { success: false, status: result.status, error: result.error }
+        return { success: false, status: result.status, expired: result.expired, error: result.error }
     }
 
     async downloadImage(url: string, key?: string | number): Promise<{ success: boolean; data?: Buffer; contentType?: string; cachePath?: string; error?: string }> {
@@ -2093,7 +2107,7 @@ window.addEventListener('scroll',function(){document.getElementById('btt').class
 </html>`
     }
 
-    private async fetchAndDecryptImage(url: string, key?: string | number): Promise<{ success: boolean; data?: Buffer; contentType?: string; cachePath?: string; status?: number; error?: string }> {
+    private async fetchAndDecryptImage(url: string, key?: string | number): Promise<{ success: boolean; data?: Buffer; contentType?: string; cachePath?: string; status?: number; expired?: boolean; error?: string }> {
         if (!url) return { success: false, error: 'url 不能为空' }
 
         const isVideo = isVideoUrl(url)
@@ -2250,7 +2264,13 @@ window.addEventListener('scroll',function(){document.getElementById('btt').class
                 const req = https.request(options, (res: any) => {
                     if (res.statusCode !== 200 && res.statusCode !== 206) {
                         console.error(`[SnsService] CDN 请求失败: HTTP ${res.statusCode}`)
-                        resolve({ success: false, status: res.statusCode, error: `HTTP ${res.statusCode}` })
+                        // 链接卡封面图（公众号/小程序）400 表示签名已过期，重试无效：
+                        // 返回 expired 标记与用户可理解的中文文案；图片/视频本体不受影响。
+                        if (res.statusCode === 400 && isLinkCardImageUrl(url)) {
+                            resolve({ success: false, status: res.statusCode, expired: true, error: '链接已过期，无法获取' })
+                        } else {
+                            resolve({ success: false, status: res.statusCode, error: `HTTP ${res.statusCode}` })
+                        }
                         return
                     }
 
