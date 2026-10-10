@@ -237,3 +237,13 @@ WM（`WeChatMsg-master/WeChatMsg-master/`）:
 - `scripts/verify-native-modules.cjs` — Layer 2: 5/5 原生模块
 - `scripts/verify-wcdb-link.cjs` — Layer 3: WCDB 链路
 - `scripts/verify-wechat-inject.cjs` — Layer 4: WeChat 注入
+
+## 2026-10-11 更新：安装包两大故障修复（commit d4cfd79）
+
+用户安装 `MSG-0.1.0-Setup.exe` 后报告：年报/双人报告 `Worker 错误: Cannot find module ...app.asar.unpacked.unpacked\dist-electron\wcdbWorker.js`；资源浏览部分图片 `解密后不是有效图片`。两处均为真实代码 bug，已修复并重打包：
+
+1. **报告 Worker 路径双层 `.unpacked`** — asarUnpack 解包 `dist-electron/*Worker.js` 后，报告 worker（codeSplitting:false 内联了 wcdbService）的 `__dirname` 已含 `app.asar.unpacked`，`resolveWorkerPath` 旧逻辑 `replace('.asar', '.asar.unpacked')` 再替换一次 → 双层路径 → worker 异步 error → 报错。修复：幂等守卫（含 `app.asar.unpacked` 则不再替换）+ 锚定 `dist-electron` 根。
+2. **`_t_NW.dat` 明文图片误报** — 取证探针（`scripts/probe-image-decrypt.cjs`，wx_key.dll 注入取 kvcomm code → 派生 xor/aes）均衡抽样 500 DAT：失败 25 个全是 `*_t_NW.dat`，实证其为**明文 JPEG/PNG**（多设备同步文件不加密）；原生 addon 对 version=0 文件盲目全量 XOR → 垃圾输出且非 null → 应用信任原生产物直接报错。修复：原生产物无效时回退 `tryDecryptDatWithJs`（directExt 明文识别 + v3 XOR + v4 AES）。
+3. **顺带发现**：Electron 43 safeStorage 密文与写入进程绑定（dev 解不开打包版写入的 `safe:` 值）；换安装目录重装可能导致旧配置密钥不可读，需重新引导。
+4. 类型检查 110 错误 = 基线，0 新增；探针 WXGF ffmpeg 解码 30/30 成功；安装包已重建（224,210,367 B @ 2026-10-11 0:32:50），包内 main.js / annualReportWorker.js 已含两处修复（asar 抽检确认）。
+5. 遗留：dev 下朋友圈视频无法预览（CDN 链接过期同类问题？），待诊。
