@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { basename, dirname, extname, join } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'fs'
@@ -594,21 +594,38 @@ export class ImageDecryptService {
       this.logInfo('开始解密DAT文件', { datPath, xorKey, hasAesKey: Boolean(aesKeyForNative) })
       this.emitDecryptProgress(payload, cacheKey, 'decrypting', 58, 'running')
       const nativeResult = await this.tryDecryptDatWithNative(datPath, xorKey, aesKeyForNative)
-      if (!nativeResult) {
+
+      let decrypted: Buffer | null = null
+      if (nativeResult) {
+        // 统一走原有 wxgf/ffmpeg 流程，确保行为与历史版本一致
+        const wxgfResult = await this.unwrapWxgf(nativeResult.data)
+        decrypted = wxgfResult.data
+      }
+
+      let detectedExt = decrypted ? this.detectImageExtension(decrypted) : null
+
+      // 原生解密产物无法识别为图片时回退 JS 解密。
+      // 例如 *_t_NW.dat 这类无头纯 XOR 变体：addon 不识别其格式时会原样返回
+      // 加密字节（非 null），若不回退会直接误报“解密后不是有效图片”。
+      if (!detectedExt && nativeResult) {
+        this.logInfo('原生解密产物无效，回退 JS 解密', { datPath })
+        const jsResult = await this.tryDecryptDatWithJs(datPath, xorKey, aesKeyForNative)
+        if (jsResult) {
+          const wxgfResult = await this.unwrapWxgf(jsResult.data)
+          decrypted = wxgfResult.data
+          detectedExt = this.detectImageExtension(decrypted)
+          this.logInfo('JS 解密 fallback 已启用', { datPath, ext: detectedExt })
+        }
+      }
+
+      if (!nativeResult && !decrypted) {
         this.emitDecryptProgress(payload, cacheKey, 'failed', 100, 'error', 'Rust原生解密不可用')
         return { success: false, error: 'Rust原生解密不可用或解密失败，请检查 native 模块与密钥配置', failureKind: 'not_found' }
       }
-      let decrypted: Buffer = nativeResult.data
       this.emitDecryptProgress(payload, cacheKey, 'decrypting', 78, 'running')
 
-      // 统一走原有 wxgf/ffmpeg 流程，确保行为与历史版本一致
-      const wxgfResult = await this.unwrapWxgf(decrypted)
-      decrypted = wxgfResult.data
-
-      const detectedExt = this.detectImageExtension(decrypted)
-
       // 如果解密产物无法识别为图片，归类为“解密失败”。
-      if (!detectedExt) {
+      if (!detectedExt || !decrypted) {
         this.emitDecryptProgress(payload, cacheKey, 'failed', 100, 'error', '解密后不是有效图片')
         return {
           success: false,
