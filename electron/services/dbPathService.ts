@@ -1,5 +1,6 @@
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 import { existsSync, readdirSync, statSync, readFileSync } from 'fs'
+import { execFileSync } from 'child_process'
 import { homedir } from 'os'
 import { createDecipheriv } from 'crypto'
 import { expandHomePath } from '../utils/pathUtils'
@@ -111,8 +112,34 @@ export class DbPathService {
         // macOS 旧路径兜底
         possiblePaths.push(join(home, 'Library', 'Containers', 'com.tencent.xinWeChat', 'Data', 'Documents', 'xwechat_files'))
       } else {
-        // Windows 微信4.x 数据目录
+        // Windows 微信4.x 数据目录：按权威程度探测
+        // 1) 默认位置
         possiblePaths.push(join(home, 'Documents', 'xwechat_files'))
+
+        // 2) 从注册表拿微信安装目录，检查安装目录本身/同级目录/父级 WeChat 目录
+        for (const regKey of ['HKCU\\Software\\Tencent\\Weixin', 'HKCU\\Software\\Tencent\\WeChat', 'HKLM\\SOFTWARE\\Tencent\\WeChat']) {
+          const installPath = this.readRegistryInstallPath(regKey)
+          if (!installPath || !existsSync(installPath)) continue
+          possiblePaths.push(join(installPath, 'xwechat_files'))
+          const parent = dirname(installPath)
+          possiblePaths.push(join(parent, 'WeChat', 'xwechat_files'))
+          possiblePaths.push(join(parent, 'WeChat Files', 'xwechat_files'))
+          // 安装目录同级一层：任何含 wechat/weixin 关键字的目录下的 xwechat_files
+          try {
+            for (const entry of readdirSync(parent)) {
+              const lower = entry.toLowerCase()
+              if (!lower.includes('wechat') && !lower.includes('weixin')) continue
+              const candidate = join(parent, entry, 'xwechat_files')
+              if (!possiblePaths.includes(candidate)) possiblePaths.push(candidate)
+            }
+          } catch { }
+        }
+
+        // 3) 各盘符根目录常见位置兜底
+        for (const drive of this.listFixedDrives()) {
+          possiblePaths.push(join(drive, 'xwechat_files'))
+          possiblePaths.push(join(drive, 'Documents', 'xwechat_files'))
+        }
       }
 
       for (const path of possiblePaths) {
@@ -134,6 +161,39 @@ export class DbPathService {
     } catch (e) {
       return { success: false, error: String(e) }
     }
+  }
+
+  /**
+   * 读取注册表中微信安装目录（InstallPath，支持 REG_SZ / REG_EXPAND_SZ）
+   */
+  private readRegistryInstallPath(regKey: string): string | null {
+    try {
+      const out = execFileSync('reg.exe', ['query', regKey, '/v', 'InstallPath'], {
+        encoding: 'utf8', windowsHide: true, timeout: 8000
+      })
+      const m = out.match(/InstallPath\s+REG_(?:EXPAND_)?SZ\s+(.+)/i)
+      if (!m) return null
+      let v = m[1].trim()
+      const envMatch = v.match(/^%([^%]+)%(.*)$/)
+      if (envMatch) v = (process.env[envMatch[1]] || '') + envMatch[2]
+      return v
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 枚举存在的盘符根目录（C:\、D:\ …）
+   */
+  private listFixedDrives(): string[] {
+    const drives: string[] = []
+    for (let code = 67; code <= 90; code++) {
+      const root = `${String.fromCharCode(code)}:\\`
+      try {
+        if (existsSync(root)) drives.push(root)
+      } catch { }
+    }
+    return drives
   }
 
   /**

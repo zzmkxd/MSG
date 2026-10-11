@@ -92,7 +92,7 @@
       "target": [
         "nsis"
       ],
-      "executableName": "electron",
+      "executableName": "MSG",
       "icon": "public/icon.ico",
       "extraFiles": [
         {

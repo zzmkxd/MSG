@@ -69,44 +69,54 @@ export class KeyService {
   private readonly DB_KEY_PROCESS_CHECK_INTERVAL_MS = 1000
 
   private getDllPath(): string {
-    const isPackaged = typeof app !== 'undefined' && app ? app.isPackaged : process.env.NODE_ENV === 'production'
     const archDir = process.arch === 'arm64' ? 'arm64' : 'x64'
     const candidates: string[] = []
+    const push = (p: string) => { if (p && !candidates.includes(p)) candidates.push(p) }
 
-    if (process.env.WX_KEY_DLL_PATH) {
-      candidates.push(process.env.WX_KEY_DLL_PATH)
-    }
+    if (process.env.WX_KEY_DLL_PATH) push(process.env.WX_KEY_DLL_PATH)
 
-    if (isPackaged) {
-      candidates.push(join(process.resourcesPath, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
-      candidates.push(join(process.resourcesPath, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
-      candidates.push(join(process.resourcesPath, 'resources', 'key', 'win32', 'wx_key.dll'))
-      candidates.push(join(process.resourcesPath, 'resources', 'wx_key.dll'))
-      candidates.push(join(process.resourcesPath, 'wx_key.dll'))
-      // 兜底：基于 exe 所在目录解析，避免 process.resourcesPath 异常时全部落空
-      const execDir = dirname(process.execPath)
-      candidates.push(join(execDir, 'resources', 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
-      candidates.push(join(execDir, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
-      candidates.push(join(execDir, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
-      candidates.push(join(execDir, 'key', 'win32', 'x64', 'wx_key.dll'))
-    } else {
-      const cwd = process.cwd()
-      candidates.push(join(cwd, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
-      candidates.push(join(cwd, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
-      candidates.push(join(cwd, 'resources', 'key', 'win32', 'wx_key.dll'))
-      candidates.push(join(cwd, 'resources', 'wx_key.dll'))
-      candidates.push(join(app.getAppPath(), 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
-      candidates.push(join(app.getAppPath(), 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
-      candidates.push(join(app.getAppPath(), 'resources', 'key', 'win32', 'wx_key.dll'))
-      candidates.push(join(app.getAppPath(), 'resources', 'wx_key.dll'))
-    }
+    // 1) exe 所在目录（打包后最可靠；不依赖 isPackaged —— 曾因 exe 名为 electron
+    //    导致 isPackaged=false 走 dev 分支、去 app.asar 内找 dll 而全部落空）
+    const execDir = dirname(process.execPath)
+    push(join(execDir, 'resources', 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+    push(join(execDir, 'resources', 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
+    push(join(execDir, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+    push(join(execDir, 'key', 'win32', 'x64', 'wx_key.dll'))
 
-    for (const path of candidates) {
-      if (existsSync(path)) return path
-    }
+    // 2) process.resourcesPath（Electron 注入，worker 中可能不存在）
+    try {
+      if (typeof process.resourcesPath === 'string' && process.resourcesPath) {
+        push(join(process.resourcesPath, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+        push(join(process.resourcesPath, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
+        push(join(process.resourcesPath, 'resources', 'key', 'win32', 'wx_key.dll'))
+        push(join(process.resourcesPath, 'resources', 'wx_key.dll'))
+        push(join(process.resourcesPath, 'wx_key.dll'))
+      }
+    } catch { }
+
+    // 3) 当前工作目录（开发环境）
+    const cwd = process.cwd()
+    push(join(cwd, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+    push(join(cwd, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
+    push(join(cwd, 'resources', 'key', 'win32', 'wx_key.dll'))
+    push(join(cwd, 'resources', 'wx_key.dll'))
+
+    // 4) app.getAppPath()（开发环境）
+    try {
+      if (app && typeof app.getAppPath === 'function') {
+        const appPath = app.getAppPath()
+        push(join(appPath, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+        push(join(appPath, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
+        push(join(appPath, 'resources', 'key', 'win32', 'wx_key.dll'))
+        push(join(appPath, 'resources', 'wx_key.dll'))
+      }
+    } catch { }
 
     this.lastCandidates = candidates
-    return candidates[0]
+    for (const p of candidates) {
+      if (existsSync(p)) return p
+    }
+    return candidates[0] || ''
   }
 
   private isNetworkPath(path: string): boolean {

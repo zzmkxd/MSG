@@ -95,22 +95,23 @@ function checkPackArtifacts() {
     const names = readdirSync(release);
     const setup = names.find((n) => /Setup\.exe$/i.test(n) || /MSG-.*\.exe$/i.test(n));
     const winUnpacked = names.find((n) => /win-unpacked/i.test(n) || /win-/i.test(n) && !/\.exe$/i.test(n));
-    // electron-builder 常见布局: release/win-unpacked/electron.exe
+    // electron-builder 布局: release/win-unpacked/MSG.exe（executableName=MSG；
+    // 不能叫 electron.exe，否则 Electron 按 exe 名误判 isPackaged=false）
     const unpackedDir = join(release, 'win-unpacked');
     const exeCandidates = [
+      join(unpackedDir, 'MSG.exe'),
+      join(release, 'MSG.exe'),
       join(unpackedDir, 'electron.exe'),
       join(release, 'electron.exe'),
     ];
     let exe = exeCandidates.find((p) => existsSync(p));
     if (!exe && existsSync(unpackedDir)) {
       const files = readdirSync(unpackedDir);
-      const hit = files.find((f) => f.toLowerCase() === 'electron.exe');
+      const hit = files.find((f) => /^MSG\.exe$/i.test(f));
       if (hit) exe = join(unpackedDir, hit);
-      const wrong = files.find((f) => /^MSG\.exe$/i.test(f) || /^msg\.exe$/i.test(f));
-      if (wrong) checks.push({ ok: false, msg: `发现错误 EXE 名 ${wrong} — 会导致 WCDB -1006` });
     }
     if (exe) checks.push({ ok: true, msg: `宿主 EXE: ${exe}` });
-    else checks.push({ ok: false, msg: '未找到 electron.exe（win-unpacked）' });
+    else checks.push({ ok: false, msg: '未找到 MSG.exe（win-unpacked）' });
 
     if (setup) checks.push({ ok: true, msg: `安装包: ${setup}` });
     else checks.push({ ok: false, msg: '未找到 Setup.exe 安装包（可仅有 dir 目标）' });
@@ -159,7 +160,7 @@ function writeReport() {
     checkpoint: {
       title: '人工验收节点（仅需你看成果）',
       steps: [
-        '1. 若刚打包：安装或直接跑 release/win-unpacked/electron.exe',
+        '1. 若刚打包：安装或直接跑 release/win-unpacked/MSG.exe',
         '2. 引导：协议 → 账号 → 密钥 → DB → 进主界面（应无 -1006）',
         '3. 会话列表点开一条聊天，确认消息气泡正常',
         '4. 资源页：点一张图解密；可选批量勾选解密',

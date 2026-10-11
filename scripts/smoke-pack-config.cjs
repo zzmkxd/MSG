@@ -12,11 +12,13 @@ const checks = [];
 const fail = (id, msg) => checks.push({ id, ok: false, msg });
 const pass = (id, msg) => checks.push({ id, ok: true, msg });
 
-// 1. EXE 名必须是 electron（WCDB GetModuleFileName 校验）
-if (win.executableName === 'electron') {
-  pass('executableName', 'win.executableName = "electron"');
+// 1. EXE 名不得为 electron：Electron 按 exe 名判断 isPackaged，叫 electron 会被
+//    当成开发环境 → 资源路径解析全走 dev 分支（wx_key.dll 找不到等一因多果）。
+//    历史 -1006（厂商 WCDB 校验宿主 EXE 名）随 Rust 数据层替换已不再存在。
+if (win.executableName && win.executableName.toLowerCase() !== 'electron') {
+  pass('executableName', `win.executableName = "${win.executableName}"（非 electron，isPackaged 正常）`);
 } else {
-  fail('executableName', `期望 "electron"，实际 ${JSON.stringify(win.executableName)} — 打包后会 -1006`);
+  fail('executableName', `executableName 不能是 "electron"，实际 ${JSON.stringify(win.executableName)} — 会导致 isPackaged=false 资源全错`);
 }
 
 // 2. Worker 必须 asarUnpack
