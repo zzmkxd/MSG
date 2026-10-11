@@ -247,6 +247,28 @@ const extractVideoKey = (xml: string): string | undefined => {
     return match ? match[1] : undefined
 }
 
+// ffmpeg 可执行文件路径（ffmpeg-static，含 asar.unpacked 映射，与 imageDecryptService 一致）
+const getFfmpegPath = (): string => {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const ffmpegStatic = require('ffmpeg-static')
+        if (typeof ffmpegStatic === 'string') {
+            let p = ffmpegStatic
+            if (p.includes('app.asar') && !p.includes('app.asar.unpacked')) {
+                p = p.replace('app.asar', 'app.asar.unpacked')
+            }
+            if (existsSync(p)) return p
+        }
+        if (app?.isPackaged && process.resourcesPath) {
+            const p2 = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe')
+            if (existsSync(p2)) return p2
+        }
+        const devP = join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe')
+        if (existsSync(devP)) return devP
+    } catch { /* ignore */ }
+    return 'ffmpeg'
+}
+
 /**
  * 从 XML 中解析评论信息（含表情包、回复关系）
  */
@@ -2122,6 +2144,62 @@ window.addEventListener('scroll',function(){document.getElementById('btt').class
 </html>`
     }
 
+    /**
+     * 检测视频编码（解析 ffmpeg 输出中的 Video 流编码名）
+     */
+    private async probeVideoCodec(filePath: string): Promise<string> {
+        return new Promise((resolve) => {
+            const { spawn } = require('child_process')
+            let stderrText = ''
+            let proc: any = null
+            try {
+                proc = spawn(getFfmpegPath(), ['-hide_banner', '-i', filePath], { windowsHide: true })
+            } catch {
+                return resolve('')
+            }
+            proc.stderr.on('data', (c: Buffer) => {
+                stderrText += c.toString()
+                if (stderrText.length > 131072) { try { proc.kill() } catch { } }
+            })
+            const timer = setTimeout(() => { try { proc.kill() } catch { } resolve('') }, 15000)
+            proc.on('close', () => {
+                clearTimeout(timer)
+                const m = stderrText.match(/Video:\s*([a-z0-9_]+)/i)
+                resolve(m ? m[1].toLowerCase() : '')
+            })
+            proc.on('error', () => { clearTimeout(timer); resolve('') })
+        })
+    }
+
+    /**
+     * HEVC 视频在 Electron/Chromium 中无法解码播放：转码为 H.264 后缓存。
+     */
+    private async transcodeToH264(inputPath: string, outputPath: string): Promise<boolean> {
+        return new Promise((resolve) => {
+            const { spawn } = require('child_process')
+            let proc: any = null
+            try {
+                proc = spawn(getFfmpegPath(), [
+                    '-hide_banner', '-loglevel', 'error', '-y',
+                    '-i', inputPath,
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    outputPath
+                ], { windowsHide: true })
+            } catch {
+                return resolve(false)
+            }
+            proc.stderr.on('data', () => { /* 吞掉错误输出，避免管道阻塞 */ })
+            const timer = setTimeout(() => { try { proc.kill('SIGKILL') } catch { } resolve(false) }, 180000)
+            proc.on('close', (code: number) => {
+                clearTimeout(timer)
+                resolve(code === 0 && existsSync(outputPath))
+            })
+            proc.on('error', () => { clearTimeout(timer); resolve(false) })
+        })
+    }
+
     private async fetchAndDecryptImage(url: string, key?: string | number): Promise<{ success: boolean; data?: Buffer; contentType?: string; cachePath?: string; status?: number; expired?: boolean; error?: string }> {
         if (!url) return { success: false, error: 'url 不能为空' }
 
@@ -2225,8 +2303,17 @@ window.addEventListener('scroll',function(){document.getElementById('btt').class
                                     }
                                 }
 
-                                // 写入最终缓存 (覆盖)
-                                await writeFile(cachePath, raw)
+                                // 写入最终缓存前检测编码：HEVC 在 Chromium 中无法播放，转码为 H.264
+                                await writeFile(tmpPath, raw)
+                                const codec = await this.probeVideoCodec(tmpPath)
+                                if (codec === 'hevc') {
+                                    const ok = await this.transcodeToH264(tmpPath, cachePath)
+                                    if (!ok) {
+                                        await writeFile(cachePath, raw)
+                                    }
+                                } else {
+                                    await writeFile(cachePath, raw)
+                                }
 
                                 // 删除临时文件
                                 try { await import('fs/promises').then(fs => fs.unlink(tmpPath)) } catch (e) { }
