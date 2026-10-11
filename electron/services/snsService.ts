@@ -127,7 +127,14 @@ interface ArkmeCommentDetail {
 const fixSnsUrl = (url: string, token?: string, isVideo: boolean = false) => {
     if (!url) return url
 
-    let fixedUrl = url.replace('http://', 'https://')
+    // vweixinthumb.tc.qq.com（视频封面）的 443 端口证书不含该域名，HTTPS 必失败（实测
+    // TLS 握手失败），该 host 的 HTTP 可正常返回。对该 host 强制保持/降级为 http。
+    let fixedUrl = url
+    if (isVideoThumbUrl(url)) {
+        fixedUrl = url.replace('https://', 'http://')
+    } else {
+        fixedUrl = url.replace('http://', 'https://')
+    }
 
     // 只有非视频（即图片）才需要处理路径末尾的尺寸标识（/150、/200等）变为 /0
     if (!isVideo) {
@@ -210,6 +217,11 @@ export const isVideoUrl = (url: string) => {
     // 排除 vweixinthumb 域名 (缩略图)
     if (url.includes('vweixinthumb')) return false
     return url.includes('snsvideodownload') || url.includes('video') || url.includes('.mp4')
+}
+
+// 视频封面缩略图域名：443 证书不覆盖该域名（实测 TLS 握手失败），必须走 http
+export const isVideoThumbUrl = (url: string) => {
+    return Boolean(url && url.includes('vweixinthumb'))
 }
 
 // 朋友圈链接卡（公众号/小程序卡片）封面图域名：这类 URL 带时效签名，过期后恒定 HTTP 400，
@@ -1293,7 +1305,10 @@ class SnsService {
                 md5: m.md5,
                 token: m.token,
                 thumbToken: m.thumbToken,
-                key: isVideoPost ? (videoKey || m.key) : m.key,
+                // 视频类媒体（type 15 帖子，或任意帖子中 URL 为视频的媒体）使用 <enc> 标签里的
+                // videoKey；否则媒体自带 key。此前只有 type===15 才套用，导致 type 1 的视频帖
+                // 用 key=0 解密 → 首段 128KB 全坏 → 无法播放。
+                key: (isVideoPost || isVideoUrl(m.url)) ? (videoKey || m.key) : m.key,
                 encIdx: m.encIdx || m.enc_idx,
                 livePhoto: m.livePhoto ? {
                     ...m.livePhoto,
@@ -2176,9 +2191,11 @@ window.addEventListener('scroll',function(){document.getElementById('btt').class
                                 const raw = encryptedBuffer // 引用，方便后续操作
 
 
-                                if (key && String(key).trim().length > 0) {
+                                const keyText = key == null ? '' : String(key).trim()
+                                // key 为 "0"/空 时视为无密钥：不硬解，避免把明文视频前 128KB 搅坏
+                                const hasValidKey = keyText.length > 0 && keyText !== '0'
+                                if (hasValidKey) {
                                     try {
-                                        const keyText = String(key).trim()
                                         let keystream: Buffer
 
                                         try {

@@ -5,46 +5,72 @@
 //       同时用自己的请求头直连 CDN（http/https 变体）对照。
 
 const http = require('http')
-const { writeFileSync } = require('fs')
+const { writeFileSync, appendFileSync } = require('fs')
 const { join } = require('path')
 
 const argv = process.argv.slice(2)
 const argNum = (n, d) => { const i = argv.indexOf(n); return i !== -1 && argv[i + 1] ? parseInt(argv[i + 1], 10) : d }
+const argStr = (n, d) => { const i = argv.indexOf(n); return i !== -1 && argv[i + 1] ? argv[i + 1] : d }
 const PORT = argNum('--port', 5031)
 const LIMIT = argNum('--limit', 40)
+const TOKEN = argStr('--token', process.env.SNS_API_TOKEN || '')
 const OUT = join(__dirname, '.probe-sns-api-out.txt')
+writeFileSync(OUT, '', 'utf8')
 
 const logLines = []
-const log = (line) => { const s = String(line); logLines.push(s); console.log(s) }
+const log = (line) => {
+  const s = String(line)
+  logLines.push(s)
+  try { appendFileSync(OUT, s + '\n', 'utf8') } catch { }
+  console.log(s)
+}
 
-function apiGet(path) {
+function apiGet(path, opts = {}) {
+  const { keepBody = false } = opts
+  const sep = path.includes('?') ? '&' : '?'
+  const full = TOKEN ? `${path}${sep}access_token=${encodeURIComponent(TOKEN)}` : path
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: '127.0.0.1', port: PORT, path, timeout: 20000 }, (res) => {
-      const chunks = []
-      res.on('data', (c) => chunks.push(c))
-      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }))
-      res.on('error', reject)
+    let settled = false
+    const done = (fn, v) => { if (settled) return; settled = true; clearTimeout(hardTimer); fn(v) }
+    const hardTimer = setTimeout(() => done(reject, new Error('hang')), 120000)
+    const req = http.get({ host: '127.0.0.1', port: PORT, path: full, timeout: 30000 }, (res) => {
+      // 200 且不需要正文时（media/proxy 的视频可能几十 MB），直接断开
+      if (res.statusCode !== 200 || keepBody) {
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => done(resolve, { status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }))
+        res.on('close', () => done(resolve, { status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }))
+        res.on('error', (e) => done(reject, e))
+      } else {
+        try { res.destroy() } catch { }
+        done(resolve, { status: 200, body: '' })
+      }
     })
-    req.on('timeout', () => { req.destroy(new Error('timeout')); reject(new Error('timeout')) })
-    req.on('error', reject)
+    req.on('timeout', () => { try { req.destroy() } catch { } done(reject, new Error('timeout')) })
+    req.on('error', (e) => done(reject, e))
   })
 }
 
 function cdnGet(url) {
   return new Promise((resolve) => {
+    let settled = false
+    const done = (v) => { if (settled) return; settled = true; clearTimeout(hardTimer); resolve(v) }
+    const hardTimer = setTimeout(() => done({ err: 'hang' }), 12000)
     let mod
-    try { mod = url.startsWith('https:') ? require('https') : http } catch { return resolve({ err: 'bad-url' }) }
+    try { mod = url.startsWith('https:') ? require('https') : http } catch { return done({ err: 'bad-url' }) }
     const req = mod.get(url, {
       headers: { 'User-Agent': 'MicroMessenger Client', 'Accept': '*/*', 'Accept-Language': 'zh-CN,zh;q=0.9', 'Connection': 'keep-alive' },
-      timeout: 8000
+      timeout: 12000
     }, (res) => {
       let size = 0
-      res.on('data', (c) => { size += c.length; if (size > 65536) res.destroy() })
-      res.on('end', () => resolve({ status: res.statusCode, size }))
-      res.on('error', () => resolve({ status: res.statusCode, size }))
+      res.on('data', (c) => { size += c.length; if (size > 65536) { try { res.destroy() } catch { } done({ status: res.statusCode, size }) } })
+      res.on('end', () => done({ status: res.statusCode, size }))
+      res.on('close', () => done({ status: res.statusCode, size }))
+      res.on('error', () => done({ status: res.statusCode, size }))
     })
-    req.on('timeout', () => { req.destroy(new Error('t')); resolve({ err: 'timeout' }) })
-    req.on('error', (e) => resolve({ err: e.code || 'error' }))
+    req.on('timeout', () => { try { req.destroy() } catch { } done({ err: 'timeout' }) })
+    req.on('error', (e) => done({ err: e.code || 'error' }))
+    req.on('close', () => done({ err: 'closed' }))
   })
 }
 
@@ -66,7 +92,7 @@ async function main() {
 
   let timeline
   try {
-    const r = await apiGet('/api/v1/sns/timeline?limit=200&media=false')
+    const r = await apiGet('/api/v1/sns/timeline?limit=200&media=false', { keepBody: true })
     log(`timeline -> ${r.status}, body len ${r.body.length}`)
     const j = JSON.parse(r.body)
     timeline = j.timeline || []
@@ -106,11 +132,14 @@ async function main() {
   const failures = []
 
   for (const m of sample) {
+    log(`[iter] ${m.kind} video=${m.isVideo} host=${m.host}`)
     // 应用侧（完整拉取+解密管线）
     let appStatus = '', appErr = ''
     try {
       const keyParam = m.key ? `&key=${encodeURIComponent(m.key)}` : ''
+      log(`[iter] proxy call...`)
       const r = await apiGet(`/api/v1/sns/media/proxy?url=${encodeURIComponent(m.url)}${keyParam}`)
+      log(`[iter] proxy -> ${r.status}`)
       if (r.status === 200) { appStatus = '200'; stats.appOk++ }
       else {
         let msg = ''
@@ -119,11 +148,14 @@ async function main() {
         stats.appFail++
       }
     } catch (e) {
+      log(`[iter] proxy err: ${e.message}`)
       appStatus = 'ERR:' + e.message; stats.appFail++
     }
 
     // 直连 CDN 对照（fixed https；失败再试 http）
+    log(`[iter] cdn call...`)
     let cdn = await cdnGet(m.url)
+    log(`[iter] cdn -> ${cdn.status ?? cdn.err}`)
     let upgraded = ''
     if (!(cdn.status === 200 || cdn.status === 206) && m.url.startsWith('https:')) {
       const r2 = await cdnGet(m.url.replace('https:', 'http:'))

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HTTP API 服务
  * 提供 ChatLab 标准化格式的消息查询 API
  */
@@ -1544,7 +1544,13 @@ class HttpService {
     if (typeof value === 'number' && Number.isFinite(value)) return value
     const text = String(value).trim()
     if (!text) return undefined
-    if (/^-?\d+$/.test(text)) return Number(text)
+    if (/^-?\d+$/.test(text)) {
+      // 朋友圈媒体密钥是 19/20 位十进制数，远超 Number.MAX_SAFE_INTEGER：
+      // 转 Number 会丢精度导致密钥流完全错误（502 解密失败）。
+      // 仅在安全整数范围内转数字，否则保留原始字符串。
+      const n = Number(text)
+      return Number.isSafeInteger(n) ? n : text
+    }
     return text
   }
 
