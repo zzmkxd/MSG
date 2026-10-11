@@ -27,6 +27,10 @@ export class KeyService {
   private getLastErrorMsg: any = null
   private getImageKeyDll: any = null
 
+  // 诊断：最近一次加载失败的详情与候选路径
+  private lastLoadError: string = ''
+  private lastCandidates: string[] = []
+
   // Win32 APIs
   private kernel32: any = null
   private user32: any = null
@@ -79,6 +83,12 @@ export class KeyService {
       candidates.push(join(process.resourcesPath, 'resources', 'key', 'win32', 'wx_key.dll'))
       candidates.push(join(process.resourcesPath, 'resources', 'wx_key.dll'))
       candidates.push(join(process.resourcesPath, 'wx_key.dll'))
+      // 兜底：基于 exe 所在目录解析，避免 process.resourcesPath 异常时全部落空
+      const execDir = dirname(process.execPath)
+      candidates.push(join(execDir, 'resources', 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+      candidates.push(join(execDir, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
+      candidates.push(join(execDir, 'resources', 'key', 'win32', 'x64', 'wx_key.dll'))
+      candidates.push(join(execDir, 'key', 'win32', 'x64', 'wx_key.dll'))
     } else {
       const cwd = process.cwd()
       candidates.push(join(cwd, 'resources', 'key', 'win32', archDir, 'wx_key.dll'))
@@ -95,6 +105,7 @@ export class KeyService {
       if (existsSync(path)) return path
     }
 
+    this.lastCandidates = candidates
     return candidates[0]
   }
 
@@ -130,6 +141,7 @@ export class KeyService {
 
       if (!existsSync(dllPath)) {
         console.error(`wx_key.dll 不存在于路径: ${dllPath}`)
+        console.error('已尝试的候选路径:', this.lastCandidates.join(' | '))
         return false
       }
 
@@ -150,6 +162,7 @@ export class KeyService {
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e)
       console.error(`加载 wx_key.dll 失败\n  路径: ${dllPath}\n  错误: ${errorMsg}`)
+      this.lastLoadError = `加载失败: ${errorMsg}`
       return false
     }
   }
@@ -754,7 +767,7 @@ export class KeyService {
       onStatus?: (message: string, level: number) => void
   ): Promise<DbKeyResult> {
     if (!this.ensureWin32()) return { success: false, error: '仅支持 Windows' }
-    if (!this.ensureLoaded()) return { success: false, error: 'wx_key.dll 未加载' }
+    if (!this.ensureLoaded()) return { success: false, error: `wx_key.dll 未加载${this.lastLoadError ? `（${this.lastLoadError}）` : ''}` }
     if (!this.ensureKernel32()) return { success: false, error: 'Kernel32 Init Failed' }
 
     const logs: string[] = []
@@ -895,7 +908,7 @@ export class KeyService {
       wxidParam?: string
   ): Promise<ImageKeyResult> {
     if (!this.ensureWin32()) return { success: false, error: '仅支持 Windows' }
-    if (!this.ensureLoaded()) return { success: false, error: 'wx_key.dll 未加载' }
+    if (!this.ensureLoaded()) return { success: false, error: `wx_key.dll 未加载${this.lastLoadError ? `（${this.lastLoadError}）` : ''}` }
 
     onProgress?.('正在从缓存目录扫描图片密钥...')
 

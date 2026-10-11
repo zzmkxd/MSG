@@ -4625,27 +4625,73 @@ export class WcdbCore {
       if (!initOk) return { success: false, error: 'WCDB 初始化失败' }
     }
 
-    if (!this.wcdbVerifyUser) {
-      return { success: false, error: 'Binding not found: VerifyUser' }
+    if (this.wcdbVerifyUser) {
+      return new Promise((resolve) => {
+        try {
+          // Allocate buffer for result JSON
+          const maxLen = 1024
+          const outBuf = Buffer.alloc(maxLen)
+
+          // Call native function
+          const hwndVal = hwnd ? BigInt(hwnd) : BigInt(0)
+          this.wcdbVerifyUser(hwndVal, message || '', outBuf, maxLen)
+
+          // Parse result
+          const jsonStr = this.koffi.decode(outBuf, 'char', -1)
+          const result = JSON.parse(jsonStr)
+          resolve(result)
+        } catch (e) {
+          resolve({ success: false, error: String(e) })
+        }
+      })
     }
 
+    // Rust 开源数据层未导出 VerifyUser（厂商闭源 DLL 才有该符号）：
+    // 回退为 Windows Hello 原生 API（UserConsentVerifier）经 PowerShell 调用。
+    return this.verifyUserViaWindowsHello(message)
+  }
+
+  /**
+   * 通过 Windows.Security.Credentials.UI.UserConsentVerifier 触发 Windows Hello 验证。
+   * 状态映射：Verified / Canceled / DeviceNotPresent / NotConfiguredForUser /
+   * DisabledByPolicy / DeviceBusy / RetriesExhausted
+   */
+  private verifyUserViaWindowsHello(message: string): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
+      const { spawn } = require('child_process')
+      const safeMessage = String(message || '请验证您的身份').replace(/'/g, "''")
+      const psScript = [
+        '[Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI,ContentType=WindowsRuntime] | Out-Null',
+        `$op = [Windows.Security.Credentials.UI.UserConsentVerifier]::RequestVerificationAsync('${safeMessage}')`,
+        '$r = $op.GetAwaiter().GetResult()',
+        '$r.Status.ToString()'
+      ].join('; ')
+      let proc: any = null
       try {
-        // Allocate buffer for result JSON
-        const maxLen = 1024
-        const outBuf = Buffer.alloc(maxLen)
-
-        // Call native function
-        const hwndVal = hwnd ? BigInt(hwnd) : BigInt(0)
-        this.wcdbVerifyUser(hwndVal, message || '', outBuf, maxLen)
-
-        // Parse result
-        const jsonStr = this.koffi.decode(outBuf, 'char', -1)
-        const result = JSON.parse(jsonStr)
-        resolve(result)
+        proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript], { windowsHide: true })
       } catch (e) {
-        resolve({ success: false, error: String(e) })
+        return resolve({ success: false, error: String(e) })
       }
+      let out = ''
+      let err = ''
+      proc.stdout.on('data', (c: Buffer) => { out += c.toString() })
+      proc.stderr.on('data', (c: Buffer) => { err += c.toString() })
+      const timer = setTimeout(() => { try { proc.kill() } catch { } resolve({ success: false, error: 'Windows Hello 验证超时' }) }, 120000)
+      proc.on('close', (code: number) => {
+        clearTimeout(timer)
+        const status = out.trim()
+        switch (status) {
+          case 'Verified': return resolve({ success: true })
+          case 'Canceled': return resolve({ success: false, error: '用户取消了验证' })
+          case 'DeviceNotPresent': return resolve({ success: false, error: '当前设备不支持 Windows Hello' })
+          case 'NotConfiguredForUser': return resolve({ success: false, error: '未配置 Windows Hello，请先在系统设置中启用' })
+          case 'DisabledByPolicy': return resolve({ success: false, error: 'Windows Hello 已被组策略禁用' })
+          case 'DeviceBusy': return resolve({ success: false, error: '设备忙，请稍后重试' })
+          case 'RetriesExhausted': return resolve({ success: false, error: '验证尝试次数过多，请稍后再试' })
+          default: return resolve({ success: false, error: `Windows Hello 验证失败: ${status || err.trim() || ('exit ' + code)}` })
+        }
+      })
+      proc.on('error', (e: Error) => { clearTimeout(timer); resolve({ success: false, error: String(e) }) })
     })
   }
 
