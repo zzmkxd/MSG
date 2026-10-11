@@ -88,7 +88,12 @@ export default defineConfig({
   base: './',
   server: {
     port: 3000,
-    strictPort: false  // 如果3000被占用，自动尝试下一个
+    strictPort: false,  // 如果3000被占用，自动尝试下一个
+    watch: {
+      // release/ 是 electron-builder 的输出目录：监听器会握住其中的目录句柄，
+      // 导致打包时 rename EPERM（dev 运行期间无法出安装包）。必须排除。
+      ignored: ['**/release/**']
+    }
   },
   build: {
     chunkSizeWarningLimit: 900,
