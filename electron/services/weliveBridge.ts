@@ -276,7 +276,9 @@ export async function runWeliveExport(options: RunWeliveExportOptions): Promise<
       })
     })
 
-    child.on('exit', (code, signal) => {
+    // close 在 stdout/stderr 都关闭后触发；分块导出时 result 事件更大，
+    // 若在 exit 阶段结算，尾部输出尚未排空会被误判为缺少会话结果。
+    child.on('close', (code, signal) => {
       drainStdout()
       const failedSessionIds = Object.keys(failedSessionErrors)
       const success = code === 0 && rawResult?.type === 'result' && rawResult.success !== false

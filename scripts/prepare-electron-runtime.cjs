@@ -14,12 +14,31 @@ function copyIfDifferent(sourcePath, targetPath) {
 
   if (targetExists) {
     const target = fs.statSync(targetPath);
-    if (target.size === source.size && target.mtimeMs >= source.mtimeMs) {
+    // Electron keeps loaded runtime DLLs locked on Windows. Timestamps are not
+    // a reliable change detector here: npm may install the exact same bytes
+    // with an older mtime, which used to trigger an unnecessary locked write.
+    if (
+      target.size === source.size &&
+      fs.readFileSync(sourcePath).equals(fs.readFileSync(targetPath))
+    ) {
       return false;
     }
   }
 
-  fs.copyFileSync(sourcePath, targetPath);
+  try {
+    fs.copyFileSync(sourcePath, targetPath);
+  } catch (error) {
+    if (error && (error.code === 'EBUSY' || error.code === 'EPERM')) {
+      const wrapped = new Error(
+        `[prepare-electron-runtime] cannot update ${path.basename(targetPath)} because it is in use. ` +
+        'Close every Electron/MSG process and run the command again.'
+      );
+      wrapped.code = error.code;
+      wrapped.cause = error;
+      throw wrapped;
+    }
+    throw error;
+  }
   return true;
 }
 

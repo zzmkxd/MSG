@@ -222,7 +222,7 @@ export default function NotificationWindow() {
     }
 
     const handleClick = (data: NotificationData) => {
-        if (data.channel === 'ai-insight') {
+        if (data.targetRoute || data.channel === 'ai-insight') {
             window.electronAPI.notification?.click({
                 sessionId: data.sessionId,
                 channel: data.channel,

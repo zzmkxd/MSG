@@ -1,4 +1,10 @@
-export type ImageUpdatePayload = { cacheKey: string; imageMd5?: string; imageDatName?: string }
+export type ImageUpdatePayload = {
+  cacheKey: string
+  sessionId?: string
+  createTime?: number
+  imageMd5?: string
+  imageDatName?: string
+}
 export type ImageCacheResolvedPayload = ImageUpdatePayload & { localPath: string }
 export type VoiceTranscriptPartialPayload = { sessionId?: string; msgId: string; createTime?: number; text: string }
 

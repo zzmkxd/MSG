@@ -15,6 +15,7 @@ export default function ChatHistoryPage() {
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('聊天记录')
   const [error, setError] = useState('')
+  const [sessionId, setSessionId] = useState('')
 
   // 简单的 XML 标签内容提取
   const extractXmlValue = (xml: string, tag: string): string => {
@@ -280,6 +281,7 @@ export default function ChatHistoryPage() {
           if (result.success && result.payload) {
             setRecordList(Array.isArray(result.payload.recordList) ? result.payload.recordList : [])
             setTitle(result.payload.title || '聊天记录')
+            setSessionId(result.payload.sessionId || '')
             setError('')
           } else {
             setError(result.error || '聊天记录载荷不存在')
@@ -313,6 +315,7 @@ export default function ChatHistoryPage() {
 
           if (records && records.length > 0) {
             setRecordList(records)
+            setSessionId(sid)
             const match = /<title>(.*?)<\/title>/.exec(msg.content || '')
             if (match) setTitle(match[1])
           } else {
@@ -344,7 +347,7 @@ export default function ChatHistoryPage() {
         ) : (
           recordList.map((item, i) => (
             <ErrorBoundary key={i} fallback={<div className="history-item error-item">消息解析失败</div>}>
-              <HistoryItem item={item} sessionId={ids.sid} />
+              <HistoryItem item={item} sessionId={sessionId || ids.sid} />
             </ErrorBoundary>
           ))
         )}
