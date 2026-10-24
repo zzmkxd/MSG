@@ -4853,6 +4853,10 @@ export class ExportContext {
         return `${fallback}；WCDB日志：${nativeLogSummary}`
     }
 
+    public isNoMessagesExportError(error: unknown): boolean {
+        return String(error || '').trim().startsWith('该会话在指定时间范围内没有消息')
+    }
+
     private async backfillMediaFieldsFromMessageDetail(sessionId: string, rows: any[], targetMediaTypes: Set<number>, control?: ExportTaskControl, options?: { force?: boolean }): Promise<void> {
         const force = options?.force === true;
         const fileOnlyMediaFilter = this.isFileOnlyMediaFilter(targetMediaTypes);

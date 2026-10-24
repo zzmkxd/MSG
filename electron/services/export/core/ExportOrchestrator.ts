@@ -43,6 +43,20 @@ import { SqlFormatter } from '../formatters/SqlFormatter';
 import { TxtFormatter } from '../formatters/TxtFormatter';
 import { WeCloneFormatter } from '../formatters/WeCloneFormatter';
 
+async function sha256File(filePath: string): Promise<string> {
+    return await new Promise<string>((resolve, reject) => {
+      const hash = crypto.createHash('sha256')
+      const input = fs.createReadStream(filePath)
+      input.on('error', reject)
+      input.on('data', (chunk) => hash.update(chunk))
+      input.on('end', () => resolve(hash.digest('hex')))
+    })
+}
+
+function sha256Text(value: string): string {
+    return crypto.createHash('sha256').update(value, 'utf8').digest('hex')
+}
+
 export class ExportOrchestrator {
     constructor(public context: ExportContext) {
     }
@@ -125,11 +139,14 @@ export class ExportOrchestrator {
     async exportSessions(sessionIds: string[], outputDir: string, options: ExportOptions, onProgress?: (progress: ExportProgress) => void, control?: ExportTaskControl): Promise<{
         success: boolean
         successCount: number
+        skipCount?: number
         failCount: number
         paused?: boolean
         stopped?: boolean
         pendingSessionIds?: string[]
         successSessionIds?: string[]
+        skippedSessionIds?: string[]
+        skippedSessionReasons?: Record<string, string>
         failedSessionIds?: string[]
         failedSessionErrors?: Record<string, string>
         sessionOutputPaths?: Record<string, string>
@@ -138,6 +155,8 @@ export class ExportOrchestrator {
         let successCount = 0;
         let failCount = 0;
         const successSessionIds: string[] = [];
+        const skippedSessionIds: string[] = [];
+        const skippedSessionReasons: Record<string, string> = {};
         const failedSessionIds: string[] = [];
         const failedSessionErrors: Record<string, string> = {};
         const sessionOutputPaths: Record<string, string> = {};
@@ -160,6 +179,8 @@ export class ExportOrchestrator {
           const effectiveOptions: ExportOptions = this.context.isMediaContentBatchExport(normalizedOptions)
             ? { ...normalizedOptions, exportVoiceAsText: false }
             : normalizedOptions
+          const incrementalAccountScope = sha256Text(`${path.resolve(this.context.getConfiguredDbPath() || '.')}\0${conn.cleanedWxid}`)
+          const incrementalOptionsFingerprint = sha256Text(JSON.stringify(effectiveOptions))
           const conflictStrategy = normalizeExportConflictStrategy(effectiveOptions.exportConflictStrategy)
 
           const exportMediaEnabled = this.context.isMediaExportEnabled(effectiveOptions)
@@ -326,6 +347,8 @@ export class ExportOrchestrator {
               stopped: true,
               pendingSessionIds: [...queue],
               successSessionIds,
+              skippedSessionIds,
+              skippedSessionReasons,
               failedSessionIds,
               failedSessionErrors,
               sessionOutputPaths
@@ -339,6 +362,8 @@ export class ExportOrchestrator {
               paused: true,
               pendingSessionIds: [...queue],
               successSessionIds,
+              skippedSessionIds,
+              skippedSessionReasons,
               failedSessionIds,
               failedSessionErrors,
               sessionOutputPaths
@@ -406,10 +431,24 @@ export class ExportOrchestrator {
                 await pathExists(preferredOutputPath)
               if (canTrySkipUnchanged) {
                 const latestRecord = exportRecordService.getLatestRecord(sessionId, effectiveOptions.format)
+                let outputIntegrityMatches = false
+                if (latestRecord?.outputPath && latestRecord.outputBytes !== undefined && latestRecord.outputHash) {
+                  try {
+                    const stat = await fs.promises.stat(preferredOutputPath)
+                    outputIntegrityMatches = path.resolve(latestRecord.outputPath) === path.resolve(preferredOutputPath) &&
+                      stat.size === latestRecord.outputBytes &&
+                      await sha256File(preferredOutputPath) === latestRecord.outputHash
+                  } catch {
+                    outputIntegrityMatches = false
+                  }
+                }
                 const hasNoDataChange = Boolean(
                   latestRecord &&
                   latestRecord.messageCount === messageCountHint &&
-                  Number(latestRecord.sourceLatestMessageTimestamp || 0) >= latestTimestampHint
+                  Number(latestRecord.sourceLatestMessageTimestamp || 0) >= latestTimestampHint &&
+                  latestRecord.accountScope === incrementalAccountScope &&
+                  latestRecord.optionsFingerprint === incrementalOptionsFingerprint &&
+                  outputIntegrityMatches
                 )
                 if (hasNoDataChange) {
                   successCount++
@@ -434,6 +473,9 @@ export class ExportOrchestrator {
               const outputPath = conflictStrategy === 'rename'
                 ? await reserveUniqueOutputPath(preferredOutputPath, reservedOutputPaths)
                 : preferredOutputPath
+
+              // 一旦开始重写就让旧成功记录失效；中断/失败后下次必须重试，不能被旧记录误跳过。
+              exportRecordService.invalidateRecords(sessionId, effectiveOptions.format)
 
               let result: { success: boolean; error?: string }
               if (effectiveOptions.format === 'json' || effectiveOptions.format === 'arkme-json') {
@@ -472,13 +514,22 @@ export class ExportOrchestrator {
                 successSessionIds.push(sessionId)
                 sessionOutputPaths[sessionId] = outputPath
                 if (typeof messageCountHint === 'number' && messageCountHint >= 0) {
+                  const outputStat = await fs.promises.stat(outputPath)
+                  const outputHash = await sha256File(outputPath)
                   exportRecordService.saveRecord(sessionId, effectiveOptions.format, messageCountHint, {
                     sourceLatestMessageTimestamp: typeof latestTimestampHint === 'number' && latestTimestampHint > 0
                       ? latestTimestampHint
                       : undefined,
-                    outputPath
+                    outputPath,
+                    outputBytes: outputStat.size,
+                    outputHash,
+                    accountScope: incrementalAccountScope,
+                    optionsFingerprint: incrementalOptionsFingerprint
                   })
                 }
+              } else if (this.context.isNoMessagesExportError(result.error)) {
+                skippedSessionIds.push(sessionId)
+                skippedSessionReasons[sessionId] = result.error || '该会话在指定时间范围内没有消息'
               } else {
                 failCount++
                 failedSessionIds.push(sessionId)
@@ -494,7 +545,11 @@ export class ExportOrchestrator {
                 currentSession: sessionInfo.displayName,
                 currentSessionId: sessionId,
                 phase: 'complete',
-                phaseLabel: result.success ? '完成' : '导出失败'
+                phaseLabel: result.success
+                  ? '完成'
+                  : this.context.isNoMessagesExportError(result.error)
+                    ? '无消息，已跳过'
+                    : '导出失败'
               }, { force: true })
               return 'done'
             } catch (error) {
@@ -576,6 +631,8 @@ export class ExportOrchestrator {
               stopped: true,
               pendingSessionIds,
               successSessionIds,
+              skippedSessionIds,
+              skippedSessionReasons,
               failedSessionIds,
               failedSessionErrors,
               sessionOutputPaths
@@ -589,6 +646,8 @@ export class ExportOrchestrator {
               paused: true,
               pendingSessionIds,
               successSessionIds,
+              skippedSessionIds,
+              skippedSessionReasons,
               failedSessionIds,
               failedSessionErrors,
               sessionOutputPaths
@@ -604,15 +663,18 @@ export class ExportOrchestrator {
           }, { force: true })
           progressEmitter.flush()
 
-          const allFailed = successCount === 0 && failCount > 0
-          const failureSummary = allFailed
-            ? Object.values(failedSessionErrors).slice(0, 3).join('；') || '所有会话导出失败'
+          const hasFailures = failCount > 0
+          const failureSummary = hasFailures
+            ? Object.values(failedSessionErrors).slice(0, 3).join('；') || `${failCount} 个会话导出失败`
             : undefined
           return {
-            success: !allFailed,
+            success: !hasFailures,
             successCount,
+            skipCount: skippedSessionIds.length,
             failCount,
             successSessionIds,
+            skippedSessionIds,
+            skippedSessionReasons,
             failedSessionIds,
             failedSessionErrors,
             sessionOutputPaths,

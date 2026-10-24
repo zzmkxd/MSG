@@ -8,26 +8,23 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 | 本目录 | `git worktree` → 分支 `composite/p0-export-fixes` |
 | origin | `https://github.com/zzmkxd/MSG.git` |
 | upstream（只读） | `https://github.com/hicccc77/WeFlow.git` |
-| 上游 tip（本轮） | `upstream/main` @ `fb58afa` |
+| 上游 tip | `upstream/main` @ `fb58afa` |
 
-产品说明见同目录 `readme.md`。
+## 暂存点（已 push）
 
-## 已完成切片
+| CP | Commit | 内容 |
+|----|--------|------|
+| CP1 | `dcae08e` | HTML 分块/滚动 + P0-5/7/11/14/15/16 |
+| CP2 | `1521ac2` | P0-4 a11y CSS 双文件同步 |
 
-### 基线核实（轮 0）
-- P0-0a / P0-0b：已在原仓 `7392574`，无需再改
+轨 B 流程：[`docs/FORK-TO-PR.md`](docs/FORK-TO-PR.md)
 
-### A1 非 AI 移植（本轮）
-| ID | 内容 | 状态 |
-|----|------|------|
-| P0-5 | 导出会话文件名指纹防覆盖 | 已改 `fileNaming.ts` |
-| P0-7 | prepare-runtime 内容比对 + EBUSY | 已改 `prepare-electron-runtime.cjs` |
-| P0-11 | welive `exit`→`close` 结算 | 已改 `weliveBridge.ts`（未剥解密） |
-| P0-14 | 通知点击 `targetRoute` | 已改 `NotificationWindow.tsx` |
-| P0-15 | 聊天记录 payload `sessionId` | 已改 `ChatHistoryPage.tsx` |
-| P0-16 | `ImageUpdatePayload` 字段 | 已改 `sharedMessageEvents.ts` |
-| P0-1+P0-3 | HTML 分块 + 无限滚动 | NEW `htmlChunking.ts` / `htmlInfiniteScrollScript.ts`；改 `HtmlFormatter.ts` / `ExportContext.ts` |
-| P0-2 | serializeHtmlScriptJson | 已并入 `htmlChunking`，Formatter 改 import |
+## 切片状态
+
+- P0-0a/0b：原仓已有（`7392574`）
+- P0-1/2/3/4/5/7/11/14/15/16：已进分支
+- P0-8：进行中（增量五重校验）
+- Orchestrator `registerLogicalOutputPath`：API 已有，接线待做
 
 ## Gate
 
@@ -35,14 +32,8 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 npm run typecheck
 ```
 
-## 遗留风险（下一批）
-- Orchestrator 尚未接线 `registerLogicalOutputPath`（当前 resolve 恒等，直写路径可用）
-- P0-4 a11y CSS（`exportHtmlStyles`）未同步
-- P0-8 增量导出 fingerprint 未做
+## 下一步（自主）
 
-## 双轨下一步
-- **A1 续**：P0-4 / P0-8；orchestrator 逻辑路径
-- **A2**：AI SDK（已推翻「不做 AI」）
-- **B**：可上游化子集 → 联系 → PR
-
-Plan：[`../.cursor/plans/20261024-msg-a1-nonai-ports.md`](../.cursor/plans/20261024-msg-a1-nonai-ports.md)
+1. P0-8 → CP3 commit+push  
+2. A2 AI SDK  
+3. B：按 FORK-TO-PR 准备联系材料（不开冷 PR）

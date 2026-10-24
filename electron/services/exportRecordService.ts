@@ -8,6 +8,10 @@ export interface ExportRecord {
   messageCount: number
   sourceLatestMessageTimestamp?: number
   outputPath?: string
+  outputBytes?: number
+  outputHash?: string
+  accountScope?: string
+  optionsFingerprint?: string
 }
 
 type RecordStore = Record<string, ExportRecord[]>
@@ -69,6 +73,10 @@ class ExportRecordService {
     extra?: {
       sourceLatestMessageTimestamp?: number
       outputPath?: string
+      outputBytes?: number
+      outputHash?: string
+      accountScope?: string
+      optionsFingerprint?: string
     }
   ): void {
     this.ensureLoaded()
@@ -83,12 +91,27 @@ class ExportRecordService {
       format,
       messageCount,
       sourceLatestMessageTimestamp: extra?.sourceLatestMessageTimestamp,
-      outputPath: extra?.outputPath
+      outputPath: extra?.outputPath,
+      outputBytes: extra?.outputBytes,
+      outputHash: extra?.outputHash,
+      accountScope: extra?.accountScope,
+      optionsFingerprint: extra?.optionsFingerprint
     })
     // keep the latest 30 records per session
     if (list.length > 30) {
       this.store[normalizedSessionId] = list.slice(-30)
     }
+    this.persist()
+  }
+
+  invalidateRecords(sessionId: string, format: string): void {
+    this.ensureLoaded()
+    const normalizedSessionId = String(sessionId || '').trim()
+    const records = this.store[normalizedSessionId]
+    if (!records) return
+    const retained = records.filter((record) => record?.format !== format)
+    if (retained.length > 0) this.store[normalizedSessionId] = retained
+    else delete this.store[normalizedSessionId]
     this.persist()
   }
 }
