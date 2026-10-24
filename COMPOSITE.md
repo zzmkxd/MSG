@@ -24,6 +24,7 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 
 - P0-0a/0b：原仓已有（`7392574`）
 - P0-1/2/3/4/5/7/8/11/14/15/16：已进分支
+- **A2-0**（进行中 → 待 VERIFY）：`ai` + `@ai-sdk/*`；adapter 闭包；`insightService.testConnection` → `generateText`；config 仅 profiles 键；**未**搬 Agent UI / 解密剥离
 - Orchestrator `registerLogicalOutputPath`：API 已有，接线待做
 
 ## Gate
@@ -38,6 +39,6 @@ Ref-Code 总交接：`../.cursor/workflow/HANDOFF-2026-10-24.md`
 
 ## 下一步（自主）
 
-1. A2 AI SDK  
+1. VERIFY 批 A2-0；可选 A2-1 设置页 AI 区 / 主路径也走 SDK  
 2. B：按 FORK-TO-PR 准备联系材料（不开冷 PR）
 

@@ -8,7 +8,7 @@
  * 4. 输出 ≤80 字见解，通过现有 showNotification 弹出右下角通知
  *
  * 设计原则：
- * - 不引入任何额外 npm 依赖，使用 Node 原生 https 模块调用 OpenAI 兼容 API
+ * - 见解生成主路径仍可用 Node https（callApi）；连接测试走 AI SDK generateText
  * - 所有失败静默处理，不影响主流程
  * - 触发频率、冷却与名单过滤均在本地完成，不把调度统计塞进模型 prompt
  */
@@ -16,7 +16,9 @@
 import https from 'https'
 import http from 'http'
 import { URL } from 'url'
+import { generateText } from 'ai'
 import { ConfigService } from './config'
+import { createAgentModel } from './agentModelAdapter'
 import { chatService, ChatSession, Message } from './chatService'
 import { snsService } from './snsService'
 import { weiboService } from './social/weiboService'
@@ -69,6 +71,8 @@ const INSIGHT_CONFIG_KEYS = new Set([
   'aiModelApiKey',
   'aiModelApiModel',
   'aiModelApiMaxTokens',
+  'aiModelProfilesJson',
+  'activeAiModelProfileId',
   'aiInsightFilterMode',
   'aiInsightFilterList',
   'aiInsightAllowMomentsContext',
@@ -95,6 +99,8 @@ interface SharedAiModelConfig {
   apiKey: string
   model: string
   maxTokens: number
+  provider: string
+  protocol: 'openai-responses' | 'openai-compatible' | 'anthropic' | 'google'
 }
 
 interface SessionInsightTriggerResult {
@@ -559,21 +565,36 @@ class InsightService {
    * 测试 API 连接，返回 { success, message }。
    * 供设置页"测试连接"按钮调用。
    */
-  async testConnection(): Promise<{ success: boolean; message: string }> {
-    const { apiBaseUrl, apiKey, model, maxTokens } = this.getSharedAiModelConfig()
+  async testConnection(override?: {
+    apiBaseUrl?: string
+    apiKey?: string
+    model?: string
+    maxTokens?: number
+    provider?: string
+    protocol?: 'openai-responses' | 'openai-compatible' | 'anthropic' | 'google'
+  }): Promise<{ success: boolean; message: string }> {
+    const shared = this.getSharedAiModelConfig()
+    const apiBaseUrl = String(override?.apiBaseUrl ?? shared.apiBaseUrl).trim()
+    const apiKey = String(override?.apiKey ?? shared.apiKey).trim()
+    const model = String(override?.model ?? shared.model).trim()
+    const maxTokens = Number(override?.maxTokens ?? shared.maxTokens)
+    const provider = String(override?.provider ?? shared.provider).trim() || 'custom'
+    const protocol = override?.protocol ?? shared.protocol
 
     if (!apiBaseUrl || !apiKey) {
       return { success: false, message: '请先填写 API 地址和 API Key' }
     }
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
     try {
-      const endpoint = buildApiUrl(apiBaseUrl, '/chat/completions')
       const requestMessages = [{ role: 'user', content: '请回复"连接成功"四个字。' }]
       insightDebugSection(
         'INFO',
         'AI 测试连接请求',
         [
-          `Endpoint: ${endpoint}`,
+          `Base URL: ${apiBaseUrl}`,
+          `Protocol: ${protocol}`,
           `Model: ${model}`,
           `Max Tokens: ${maxTokens}`,
           '',
@@ -582,16 +603,24 @@ class InsightService {
         ].join('\n')
       )
 
-      const result = await callApi(
-        apiBaseUrl,
-        apiKey,
-        model,
-        requestMessages,
-        15_000,
-        maxTokens
-      )
-      insightDebugSection('INFO', 'AI 测试连接输出原文', result)
-      return { success: true, message: `连接成功，模型回复：${result.slice(0, 50)}` }
+      const result = await generateText({
+        model: createAgentModel({
+          provider,
+          protocol,
+          baseURL: apiBaseUrl,
+          apiKey,
+          model,
+          maxOutputTokens: normalizeApiMaxTokens(maxTokens),
+        }),
+        prompt: requestMessages[0].content,
+        maxOutputTokens: Math.min(256, normalizeApiMaxTokens(maxTokens)),
+        maxRetries: 0,
+        abortSignal: controller.signal,
+      })
+      const output = String(result.text || '').trim()
+      if (!output) throw new Error('API 返回为空')
+      insightDebugSection('INFO', 'AI 测试连接输出原文', output)
+      return { success: true, message: `连接成功，模型回复：${output.slice(0, 50)}` }
     } catch (e) {
       insightDebugSection(
         'ERROR',
@@ -599,6 +628,8 @@ class InsightService {
         `错误信息：${(e as Error).message}\n\n堆栈：\n${(e as Error).stack || '[无堆栈]'}`
       )
       return { success: false, message: `连接失败：${(e as Error).message}` }
+    } finally {
+      clearTimeout(timeout)
     }
   }
 
@@ -1035,22 +1066,35 @@ ${afterText}
   private getSharedAiModelConfig(): SharedAiModelConfig {
     const apiBaseUrl = String(
       this.config.get('aiModelApiBaseUrl')
-      || this.config.get('aiInsightApiBaseUrl')
       || ''
     ).trim()
     const apiKey = String(
       this.config.get('aiModelApiKey')
-      || this.config.get('aiInsightApiKey')
       || ''
     ).trim()
     const model = String(
       this.config.get('aiModelApiModel')
-      || this.config.get('aiInsightApiModel')
       || 'gpt-4o-mini'
     ).trim() || 'gpt-4o-mini'
     const maxTokens = normalizeApiMaxTokens(this.config.get('aiModelApiMaxTokens'))
+    let provider = 'custom'
+    let protocol: SharedAiModelConfig['protocol'] = 'openai-compatible'
+    try {
+      const profiles = JSON.parse(String(this.config.get('aiModelProfilesJson') || '')) as Array<Record<string, unknown>>
+      const activeId = String(this.config.get('activeAiModelProfileId') || '')
+      const active = profiles.find((profile) => String(profile.id || '') === activeId) || profiles[0]
+      if (active) {
+        provider = String(active.provider || 'custom').trim() || 'custom'
+        const candidate = String(active.protocol || '')
+        if (candidate === 'openai-responses' || candidate === 'anthropic' || candidate === 'google') {
+          protocol = candidate
+        }
+      }
+    } catch {
+      // Legacy installs have no profile JSON and continue to use OpenAI Compatible.
+    }
 
-    return { apiBaseUrl, apiKey, model, maxTokens }
+    return { apiBaseUrl, apiKey, model, maxTokens, provider, protocol }
   }
 
   private looksLikeWxid(text: string): boolean {
