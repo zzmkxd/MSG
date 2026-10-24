@@ -32,7 +32,12 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 npm run typecheck
 ```
 
+## 交接
+
+Ref-Code 总交接：`../.cursor/workflow/HANDOFF-2026-10-24.md`
+
 ## 下一步（自主）
 
 1. A2 AI SDK  
 2. B：按 FORK-TO-PR 准备联系材料（不开冷 PR）
+
