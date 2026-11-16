@@ -7,8 +7,8 @@
 
 | 项 | 值 |
 |----|-----|
-| 原仓 | `E:\Code_zone\Msg_weflow` @ `master` `5a0fab0` |
-| 工作树 | `E:\Work_zone\Ref-Code\msg-composite` @ `composite/p0-export-fixes` `c1af9cb` |
+| 原仓 | `E:\Code_zone\Msg_weflow` @ `master` **`aca5761`**（已合入 composite） |
+| 工作树 | `E:\Work_zone\Ref-Code\msg-composite` @ `composite/p0-export-fixes` `5d6d578` |
 | origin | `https://github.com/zzmkxd/MSG.git` |
 | upstream | `https://github.com/hicccc77/WeFlow.git` |
 | **upstream/main tip** | `91adcfd`（本会话 `git fetch`；旧记 `fb58afa`） |
@@ -115,7 +115,7 @@
 | 打包 / smoke:pack | 历史曾通；本轮未重跑（native/postinstall 可能需补） |
 | 安装包 isPackaged / 资源路径 | `5a0fab0` 已修叙事 |
 | DB 依赖功能 | ❌ blocked |
-| composite 未合 master | 产品默认检出仍是 master → **用户跑的是缺 P0-1..8/A2-0 的树** |
+| composite → master | **已合** `aca5761`（2026-11-16）；日常 master 含 P0/A2/P2 |
 
 ## 8. 下一会话可直接开的无人值守实现刀（需新 Plan + 人闸写集）
 
