@@ -29,8 +29,10 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 - **A2-0**（静态 pass）：`ai` + `@ai-sdk/*`；adapter 闭包；`insightService.testConnection` → `generateText`；config 仅 profiles 键；**未**搬 Agent UI / 解密剥离；E2E awaiting-human
 - **P2 Phase1**（pass）：`chatService` BrowserWindow 守卫（worker/headless）
 - **P2 Phase2**（pass）：`sessionStatsCacheService` persistGeneration + tmp/rename + EPERM 退避
+- **P2 Phase3**（pass）：`jsonlLineReader` + ExportContext（禁 readline U+2028/2029 切裂）
+- **P2 续**（pass）：imageDownload whitelist 归一；`runtimeDocumentsPath`；`getMessagesAround` 400/480+hasMore；groupMyMessageCount 原子写
 - Orchestrator `registerLogicalOutputPath`：API 已有，接线待做
-- 下一刀：槽 20 Phase3 `jsonlLineReader` + ExportContext 接线（Plan 同文件）
+- 轨 B：**不对上游提 PR**（用户 2026-11-16 定）
 
 ## Gate
 

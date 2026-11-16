@@ -1,12 +1,22 @@
 import { join, dirname } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
-import { writeFile } from 'fs/promises'
+import { rename, rm, writeFile } from 'fs/promises'
 import { app } from 'electron'
 import { ConfigService } from './config'
 
 const CACHE_VERSION = 1
 const MAX_GROUP_ENTRIES_PER_SCOPE = 3000
 const MAX_SCOPE_ENTRIES = 12
+const CACHE_REPLACE_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800]
+
+function isRetryableCacheReplaceError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY' || code === 'EEXIST'
+}
+
+function waitForCacheReplaceRetry(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
 
 export interface GroupMyMessageCountCacheEntry {
   updatedAt: number
@@ -44,6 +54,7 @@ export class GroupMyMessageCountCacheService {
   private persistTimer: NodeJS.Timeout | null = null
   private persistInFlight = false
   private persistDirty = false
+  private persistGeneration = 0
   private store: GroupMyMessageCountCacheStore = {
     version: CACHE_VERSION,
     scopes: {}
@@ -145,25 +156,30 @@ export class GroupMyMessageCountCacheService {
 
   delete(scopeKey: string, chatroomId: string): void {
     if (!scopeKey || !chatroomId) return
+    this.persistGeneration += 1
     const scope = this.store.scopes[scopeKey]
-    if (!scope) return
-    if (!(chatroomId in scope)) return
-    delete scope[chatroomId]
-    if (Object.keys(scope).length === 0) {
-      delete this.store.scopes[scopeKey]
+    if (scope) {
+      delete scope[chatroomId]
+      if (Object.keys(scope).length === 0) {
+        delete this.store.scopes[scopeKey]
+      }
     }
+    if (this.persistInFlight) this.persistDirty = true
     this.persist()
   }
 
   clearScope(scopeKey: string): void {
     if (!scopeKey) return
-    if (!this.store.scopes[scopeKey]) return
+    this.persistGeneration += 1
     delete this.store.scopes[scopeKey]
+    if (this.persistInFlight) this.persistDirty = true
     this.persist()
   }
 
   clearAll(): void {
+    this.persistGeneration += 1
     this.store = { version: CACHE_VERSION, scopes: {} }
+    this.persistDirty = false
     if (this.persistTimer) {
       clearTimeout(this.persistTimer)
       this.persistTimer = null
@@ -214,16 +230,46 @@ export class GroupMyMessageCountCacheService {
     this.persistTimer.unref?.()
   }
 
+  private async replaceCacheFileWithRetry(temporaryPath: string, generation: number): Promise<boolean> {
+    for (let attempt = 0; ; attempt += 1) {
+      if (generation !== this.persistGeneration) return false
+      try {
+        await rename(temporaryPath, this.cacheFilePath)
+        return true
+      } catch (error) {
+        const retryDelay = CACHE_REPLACE_RETRY_DELAYS_MS[attempt]
+        if (!isRetryableCacheReplaceError(error) || retryDelay === undefined) throw error
+        await waitForCacheReplaceRetry(retryDelay)
+      }
+    }
+  }
+
   private async persistNow(): Promise<void> {
     if (this.persistInFlight) {
       this.persistDirty = true
       return
     }
     this.persistInFlight = true
+    const generation = this.persistGeneration
+    const payload = JSON.stringify(this.store)
+    const temporaryPath = `${this.cacheFilePath}.${process.pid}.${generation}.tmp`
     try {
-      await writeFile(this.cacheFilePath, JSON.stringify(this.store), 'utf8')
+      await writeFile(temporaryPath, payload, 'utf8')
+      if (generation !== this.persistGeneration) {
+        await rm(temporaryPath, { force: true })
+        return
+      }
+      const replaced = await this.replaceCacheFileWithRetry(temporaryPath, generation)
+      if (!replaced) {
+        await rm(temporaryPath, { force: true })
+        return
+      }
+      if (generation !== this.persistGeneration) {
+        await rm(this.cacheFilePath, { force: true })
+      }
     } catch (error) {
       console.error('GroupMyMessageCountCacheService: 保存缓存失败', error)
+      await rm(temporaryPath, { force: true }).catch(() => {})
     } finally {
       this.persistInFlight = false
       if (this.persistDirty) {

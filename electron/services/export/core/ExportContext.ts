@@ -35,6 +35,7 @@ import { getAvatarFallback } from '../../export/contacts/avatarHelper';
 import { pathExists, ensureExportDir, copyFileOptimized, hardlinkOrCopyFile } from '../../export/media/fileCopy';
 import { getMediaFileStat } from '../../export/media/attachmentResolver';
 import { getHtmlInfiniteScrollScript } from '../htmlInfiniteScrollScript';
+import { iterateJsonlLines } from '../utils/jsonlLineReader';
 
 export class ExportContext {
     private configService: ConfigService;
@@ -4225,7 +4226,6 @@ export class ExportContext {
           }
         }
 
-        const readline = await import('readline')
         const rows: any[] = []
         const senderSet = new Set<string>()
         let firstTime: number | null = null
@@ -4235,11 +4235,10 @@ export class ExportContext {
         const mediaTypeFilter = targetMediaTypes && targetMediaTypes.size > 0 ? targetMediaTypes : null
         const fileOnlyMediaFilter = this.isFileOnlyMediaFilter(mediaTypeFilter)
         const input = fs.createReadStream(rawPath, { encoding: 'utf8' })
-        const rl = readline.createInterface({ input, crlfDelay: Infinity })
         let lineIndex = 0
 
         try {
-          for await (const line of rl) {
+          for await (const line of iterateJsonlLines(input)) {
             if ((lineIndex++ & 0x7f) === 0) this.throwIfStopRequested(control)
             const text = String(line || '').trim()
             if (!text) continue
@@ -4392,7 +4391,6 @@ export class ExportContext {
           }
           onCollectProgress?.({ fetched: rows.length, done: true })
         } finally {
-          rl.close()
           input.destroy()
         }
 
