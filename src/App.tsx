@@ -516,7 +516,7 @@ function App() {
   // 独立协议窗口
   if (isAgreementWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <AgreementPage />
       </Suspense>
     )
@@ -524,7 +524,7 @@ function App() {
 
   if (isOnboardingWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <WelcomePage standalone />
       </Suspense>
     )
@@ -533,7 +533,7 @@ function App() {
   // 独立视频播放窗口
   if (isVideoPlayerWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <VideoWindow />
       </Suspense>
     )
@@ -543,7 +543,7 @@ function App() {
   const isImageViewerWindow = location.pathname === '/image-viewer-window'
   if (isImageViewerWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <ImageWindow />
       </Suspense>
     )
@@ -552,7 +552,7 @@ function App() {
   // 独立聊天记录窗口
   if (isChatHistoryWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <ChatHistoryPage />
       </Suspense>
     )
@@ -567,7 +567,7 @@ function App() {
     const standaloneInitialAvatarUrl = params.get('initialAvatarUrl')
     const standaloneInitialContactType = params.get('initialContactType')
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <ChatPage
           standaloneSessionWindow
           initialSessionId={sessionId}
@@ -583,7 +583,7 @@ function App() {
   // 独立通知窗口
   if (isNotificationWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <NotificationWindow />
       </Suspense>
     )
@@ -592,7 +592,7 @@ function App() {
   // 独立年度报告全屏窗口
   if (isAnnualReportWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <AnnualReportWindow />
       </Suspense>
     )
@@ -601,7 +601,7 @@ function App() {
   // 独立双人报告全屏窗口
   if (isDualReportWindow) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
         <DualReportWindow />
       </Suspense>
     )
@@ -765,14 +765,14 @@ function App() {
           <RouteGuard>
             {/* Export 模块按需挂载（首次访问或有自动化任务时），挂载后 keepalive 保持任务/调度状态 */}
             {exportMounted && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
                 <div className={`export-keepalive-page ${isExportRoute ? 'active' : 'hidden'}`} aria-hidden={!isExportRoute}>
                   <ExportPage />
                 </div>
               </Suspense>
             )}
 
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="route-loading" aria-busy="true"><span /><small>加载中</small></div>}>
               <Routes location={routeLocation}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/home" element={<HomePage />} />

@@ -126,3 +126,10 @@
     opacity: 1;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog-overlay,
+  .confirm-dialog-overlay .confirm-dialog-glass {
+    animation: none;
+  }
+}
