@@ -170,7 +170,17 @@
 }
 
 .sidebar-lock-action {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.sidebar:not(.collapsed) .sidebar-footer > .nav-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 92px;
   justify-content: center;
+  gap: 12px;
+  text-align: left;
 }
 
 // ---- Footer ----

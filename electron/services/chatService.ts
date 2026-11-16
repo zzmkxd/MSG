@@ -880,7 +880,11 @@ class ChatService {
       }
       this.refreshSessionMessageCountCacheScope()
 
-      const result = await wcdbService.getSessions()
+      let result = await wcdbService.getSessions()
+      if (!result.success && this.isMissingNativeContextError(result.error)) {
+        // -2: wcdb_api.dll process-wide native context is null; reopen once
+        if (await this.recoverMissingNativeContext()) result = await wcdbService.getSessions()
+      }
       if (!result.success || !result.sessions) {
         return { success: false, error: result.error || '获取会话失败' }
       }
@@ -1765,14 +1769,29 @@ class ChatService {
     const parts: string[] = []
     const sortedPaths = [...dbPaths].sort()
     for (const dbPath of sortedPaths) {
-      try {
-        const stat = statSync(dbPath)
-        parts.push(`${dbPath}:${stat.size}:${Math.floor(stat.mtimeMs)}`)
-      } catch {
-        parts.push(`${dbPath}:missing`)
+      // Include -wal/-shm so counts invalidate when only the journal changes
+      for (const candidatePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+        try {
+          const stat = statSync(candidatePath)
+          parts.push(`${candidatePath}:${stat.size}:${Math.floor(stat.mtimeMs)}`)
+        } catch {
+          parts.push(`${candidatePath}:missing`)
+        }
       }
     }
     return parts.join('|')
+  }
+
+  private isMissingNativeContextError(error: unknown): boolean {
+    return /(?:^|[^\d])-2(?:[^\d]|$)/.test(String(error || ''))
+  }
+
+  private async recoverMissingNativeContext(): Promise<boolean> {
+    this.connected = false
+    this.monitorSetup = false
+    await wcdbService.close().catch(() => {})
+    const result = await this.connect()
+    return result.success === true
   }
 
   private buildSessionHashLookup(sessionIds: string[]): {
