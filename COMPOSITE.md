@@ -8,7 +8,9 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 | 本目录 | `git worktree` → 分支 `composite/p0-export-fixes` |
 | origin | `https://github.com/zzmkxd/MSG.git` |
 | upstream（只读） | `https://github.com/hicccc77/WeFlow.git` |
-| 上游 tip | `upstream/main` @ `fb58afa` |
+| 上游 tip | `upstream/main` @ `91adcfd`（2026-11-16 fetch；旧 `fb58afa`） |
+| 状态对照 | [`docs/STATUS-MATRIX-2026-11-16.md`](docs/STATUS-MATRIX-2026-11-16.md) |
+| 交接 | `../.cursor/workflow/HANDOFF-msg-2026-11-16.md` |
 
 ## 暂存点（已 push）
 
@@ -24,8 +26,11 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 
 - P0-0a/0b：原仓已有（`7392574`）
 - P0-1/2/3/4/5/7/8/11/14/15/16：已进分支
-- **A2-0**（进行中 → 待 VERIFY）：`ai` + `@ai-sdk/*`；adapter 闭包；`insightService.testConnection` → `generateText`；config 仅 profiles 键；**未**搬 Agent UI / 解密剥离
+- **A2-0**（静态 pass）：`ai` + `@ai-sdk/*`；adapter 闭包；`insightService.testConnection` → `generateText`；config 仅 profiles 键；**未**搬 Agent UI / 解密剥离；E2E awaiting-human
+- **P2 Phase1**（pass）：`chatService` BrowserWindow 守卫（worker/headless）
+- **P2 Phase2**（pass）：`sessionStatsCacheService` persistGeneration + tmp/rename + EPERM 退避
 - Orchestrator `registerLogicalOutputPath`：API 已有，接线待做
+- 下一刀：槽 20 Phase3 `jsonlLineReader` + ExportContext 接线（Plan 同文件）
 
 ## Gate
 

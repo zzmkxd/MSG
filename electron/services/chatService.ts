@@ -654,8 +654,10 @@ class ChatService {
           console.error('[ChatService] 数据库监听回调失败:', error)
         }
       }
-      const windows = BrowserWindow.getAllWindows()
-      // 广播给所有渲染进程窗口
+      // Headless / worker 可能无 BrowserWindow；监控仍有用，仅跳过渲染广播
+      const windows = BrowserWindow && typeof BrowserWindow.getAllWindows === 'function'
+        ? BrowserWindow.getAllWindows()
+        : []
       windows.forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('wcdb-change', { type, json })
