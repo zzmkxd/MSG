@@ -105,13 +105,17 @@ export class ImageDownloadService {
       await this.unhook()
     }
 
-    this.lastWhitelist = whitelist
+    // string whitelist must become a one-element array; otherwise includes() does substring match
+    const normalizedWhitelist = Array.isArray(whitelist)
+      ? whitelist
+      : whitelist ? [whitelist] : []
+    this.lastWhitelist = normalizedWhitelist
 
     if (!this.pollTimer) {
       this.pollTimer = setInterval(() => this.checkAndHook(this.lastWhitelist, false), 30000)
     }
 
-    return await this.checkAndHook(whitelist, true)
+    return await this.checkAndHook(normalizedWhitelist, true)
   }
 
   async stopAutoDownload() {

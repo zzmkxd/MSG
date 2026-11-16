@@ -97,6 +97,9 @@ interface ConfigSchema {
   aiModelApiKey: string
   aiModelApiModel: string
   aiModelApiMaxTokens: number
+  /** 多模型 profile JSON（可选；空则 openai-compatible） */
+  aiModelProfilesJson: string
+  activeAiModelProfileId: string
   aiInsightEnabled: boolean
   aiInsightApiBaseUrl: string
   aiInsightApiKey: string
@@ -248,6 +251,8 @@ export class ConfigService {
       aiModelApiKey: '',
       aiModelApiModel: 'gpt-4o-mini',
       aiModelApiMaxTokens: 1024,
+      aiModelProfilesJson: '',
+      activeAiModelProfileId: '',
       aiInsightEnabled: false,
       aiInsightApiBaseUrl: '',
       aiInsightApiKey: '',

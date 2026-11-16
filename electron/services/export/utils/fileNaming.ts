@@ -1,5 +1,6 @@
 import * as path from 'path'
 import * as fs from 'fs'
+import * as crypto from 'crypto'
 import { normalizeTimestampSeconds } from './timestamp'
 import { ExportOptions } from '../types'
 
@@ -59,7 +60,10 @@ export function buildSessionExportBaseName(
   const baseName = sanitizeExportFileNamePart(displayName || sessionId) || sanitizeExportFileNamePart(sessionId) || 'session'
   const suffix = sanitizeExportFileNamePart(options.fileNameSuffix || '')
   const namingMode = normalizeFileNamingMode(options.fileNamingMode)
-  const parts = [baseName]
+  // 昵称并不唯一，且清理非法字符后不同昵称/会话也可能得到同一个文件名。
+  // 稳定的会话短指纹可防止批量导出时互相覆盖，同时不暴露完整会话 ID。
+  const sessionFingerprint = crypto.createHash('sha256').update(String(sessionId || ''), 'utf8').digest('hex').slice(0, 10)
+  const parts = [`${baseName}-${sessionFingerprint}`]
   if (suffix) parts.push(suffix)
   if (namingMode === 'date-range') {
     parts.push(buildDateRangeFileNamePart(options.dateRange))

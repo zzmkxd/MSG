@@ -34,6 +34,8 @@ import { resolveGroupNicknameByCandidates, buildGroupNicknameIdCandidates, norma
 import { getAvatarFallback } from '../../export/contacts/avatarHelper';
 import { pathExists, ensureExportDir, copyFileOptimized, hardlinkOrCopyFile } from '../../export/media/fileCopy';
 import { getMediaFileStat } from '../../export/media/attachmentResolver';
+import { getHtmlInfiniteScrollScript } from '../htmlInfiniteScrollScript';
+import { iterateJsonlLines } from '../utils/jsonlLineReader';
 
 export class ExportContext {
     private configService: ConfigService;
@@ -69,6 +71,7 @@ export class ExportContext {
     private emoticonDbPathCacheToken = '';
     private readonly emojiCaptionLookupConcurrency = 8;
     private weliveRawExportPaths = new Map<string, string>();
+    private logicalOutputPaths = new Map<string, string>();
     private contactMetadataOpenPromise: Promise<boolean> | null = null;
 
     constructor() {
@@ -165,6 +168,18 @@ export class ExportContext {
 
     public isWeliveRawExportMode(): boolean {
         return this.weliveRawExportPaths.size > 0
+    }
+
+    public registerLogicalOutputPath(physicalPath: string, logicalPath: string): void {
+        this.logicalOutputPaths.set(path.resolve(physicalPath), path.resolve(logicalPath))
+    }
+
+    public unregisterLogicalOutputPath(physicalPath: string): void {
+        this.logicalOutputPaths.delete(path.resolve(physicalPath))
+    }
+
+    public resolveLogicalOutputPath(outputPath: string): string {
+        return this.logicalOutputPaths.get(path.resolve(outputPath)) || outputPath
     }
 
     private normalizeMaxFileSizeMb(value: unknown): number | undefined {
@@ -4049,6 +4064,7 @@ export class ExportContext {
         mediaRootDir: string
         mediaRelativePrefix: string
         } {
+        outputPath = this.resolveLogicalOutputPath(outputPath)
         const exportMediaEnabled = this.isMediaExportEnabled(options);
         const outputDir = path.dirname(outputPath);
         const writeLayout = this.resolveExportWriteLayout(options);
@@ -4210,7 +4226,6 @@ export class ExportContext {
           }
         }
 
-        const readline = await import('readline')
         const rows: any[] = []
         const senderSet = new Set<string>()
         let firstTime: number | null = null
@@ -4220,11 +4235,10 @@ export class ExportContext {
         const mediaTypeFilter = targetMediaTypes && targetMediaTypes.size > 0 ? targetMediaTypes : null
         const fileOnlyMediaFilter = this.isFileOnlyMediaFilter(mediaTypeFilter)
         const input = fs.createReadStream(rawPath, { encoding: 'utf8' })
-        const rl = readline.createInterface({ input, crlfDelay: Infinity })
         let lineIndex = 0
 
         try {
-          for await (const line of rl) {
+          for await (const line of iterateJsonlLines(input)) {
             if ((lineIndex++ & 0x7f) === 0) this.throwIfStopRequested(control)
             const text = String(line || '').trim()
             if (!text) continue
@@ -4377,7 +4391,6 @@ export class ExportContext {
           }
           onCollectProgress?.({ fetched: rows.length, done: true })
         } finally {
-          rl.close()
           input.destroy()
         }
 
@@ -4836,6 +4849,10 @@ export class ExportContext {
         const nativeLogSummary = await this.getRecentWcdbCursorLogSummary(sessionId);
         if (!nativeLogSummary) return fallback
         return `${fallback}；WCDB日志：${nativeLogSummary}`
+    }
+
+    public isNoMessagesExportError(error: unknown): boolean {
+        return String(error || '').trim().startsWith('该会话在指定时间范围内没有消息')
     }
 
     private async backfillMediaFieldsFromMessageDetail(sessionId: string, rows: any[], targetMediaTypes: Set<number>, control?: ExportTaskControl, options?: { force?: boolean }): Promise<void> {
@@ -5634,87 +5651,7 @@ export class ExportContext {
     }
 
     public getVirtualScrollScript(): string {
-        return `
-      class ChunkedRenderer {
-        constructor(container, data, renderItem) {
-          this.container = container;
-          this.data = data;
-          this.renderItem = renderItem;
-          this.batchSize = 100;
-          this.rendered = 0;
-          this.loading = false;
-
-          this.list = document.createElement('div');
-          this.list.className = 'message-list';
-          this.container.appendChild(this.list);
-
-          this.sentinel = document.createElement('div');
-          this.sentinel.className = 'load-sentinel';
-          this.container.appendChild(this.sentinel);
-
-          this.renderBatch();
-
-          this.observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting && !this.loading) {
-              this.renderBatch();
-            }
-          }, { root: this.container, rootMargin: '600px' });
-          this.observer.observe(this.sentinel);
-        }
-
-        renderBatch() {
-          if (this.rendered >= this.data.length) return;
-          this.loading = true;
-          const end = Math.min(this.rendered + this.batchSize, this.data.length);
-          const fragment = document.createDocumentFragment();
-          for (let i = this.rendered; i < end; i++) {
-            const wrapper = document.createElement('div');
-            wrapper.innerHTML = this.renderItem(this.data[i], i);
-            if (wrapper.firstElementChild) fragment.appendChild(wrapper.firstElementChild);
-          }
-          this.list.appendChild(fragment);
-          this.rendered = end;
-          this.loading = false;
-        }
-
-        setData(newData) {
-          this.data = newData;
-          this.rendered = 0;
-          this.list.innerHTML = '';
-          this.container.scrollTop = 0;
-          if (this.data.length === 0) {
-            this.list.innerHTML = '<div class="empty">暂无消息</div>';
-            return;
-          }
-          this.renderBatch();
-        }
-
-        scrollToTime(timestamp) {
-          const idx = this.data.findIndex(item => item.t >= timestamp);
-          if (idx === -1) return;
-          // Ensure all messages up to target are rendered
-          while (this.rendered <= idx) {
-            this.renderBatch();
-          }
-          const el = this.list.children[idx];
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.classList.add('highlight');
-            setTimeout(() => el.classList.remove('highlight'), 2500);
-          }
-        }
-
-        scrollToIndex(index) {
-          while (this.rendered <= index) {
-            this.renderBatch();
-          }
-          const el = this.list.children[index];
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-      }
-    `;
+        return getHtmlInfiniteScrollScript();
     }
 
     public getExportStatsDateRangeToken(dateRange?: { start: number; end: number } | null): string {

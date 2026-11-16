@@ -7,15 +7,16 @@ import { buildGroupNicknameIdCandidates } from '../../export/contacts/groupNickn
 import { appendTransferDesc, isTransferExportContent, resolveTransferDesc } from '../../export/parsers/transferParser';
 import { escapeAttribute, escapeHtml } from '../../export/utils/htmlEscape';
 import { formatTimestamp } from '../../export/utils/timestamp';
+import {
+  buildHtmlChunkManifest,
+  HTML_DATA_CHUNK_SIZE,
+  HTML_EXTERNAL_CHUNK_THRESHOLD,
+  serializeHtmlScriptJson
+} from '../htmlChunking';
 
 import { parallelLimit } from '../../export/utils/parallelLimit';
 import {  ExportDisplayProfile, MediaExportItem  } from '../../export/types';
 import { wcdbService } from "../../wcdbService";
-
-/** JSON that is safe both in an inline script and in an external data chunk. */
-export function serializeHtmlScriptJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
-}
 
 export class HtmlFormatter {
   constructor(private exportService: any) {}
@@ -241,6 +242,27 @@ export class HtmlFormatter {
       // ================= BEGIN STREAM WRITING =================
       const exportMeta = this.exportService.getExportMeta(sessionId, sessionInfo, isGroup)
       const htmlStyles = this.exportService.loadExportHtmlStyles()
+      const useExternalChunks = totalMessages > HTML_EXTERNAL_CHUNK_THRESHOLD
+      const logicalOutputPath = typeof this.exportService.resolveLogicalOutputPath === 'function'
+        ? this.exportService.resolveLogicalOutputPath(outputPath)
+        : outputPath
+      const dataDirectoryName = `${path.parse(logicalOutputPath).name}_data`
+      const dataDirectoryPath = path.join(path.dirname(logicalOutputPath), dataDirectoryName)
+      const dataDirectoryUrl = `./${encodeURIComponent(dataDirectoryName)}`
+      const chunkManifest = buildHtmlChunkManifest(
+        sortedMessages.map((message: any) => Number(message.createTime) || 0),
+        {
+          external: useExternalChunks,
+          chunkSize: HTML_DATA_CHUNK_SIZE,
+          dataDirectoryUrl
+        }
+      )
+      if (useExternalChunks) {
+        if (!fs.existsSync(dataDirectoryPath)) {
+          control?.recordCreatedDir?.(dataDirectoryPath)
+        }
+        await fs.promises.mkdir(dataDirectoryPath, { recursive: true })
+      }
       await this.exportService.recordCreatedFileBeforeWrite(outputPath, control)
       const stream = fs.createWriteStream(outputPath, { encoding: 'utf-8' })
 
@@ -273,27 +295,30 @@ export class HtmlFormatter {
           <span>${escapeHtml(formatTimestamp(exportMeta.chatlab.exportedAt))}</span>
         </div>
         <div class="controls">
-          <input id="searchInput" type="search" placeholder="搜索消息..." />
-          <input id="timeInput" type="datetime-local" />
+          <label class="sr-only" for="searchInput">搜索消息</label>
+          <input id="searchInput" type="search" placeholder="搜索消息..." aria-label="搜索消息" />
+          <label class="sr-only" for="timeInput">跳转日期和时间</label>
+          <input id="timeInput" type="datetime-local" aria-label="跳转日期和时间" />
           <button id="jumpBtn" type="button">跳转</button>
           <div class="stats">
-            <span id="resultCount">共 ${sortedMessages.length} 条</span>
+            <span id="resultCount" aria-live="polite" aria-atomic="true">共 ${sortedMessages.length} 条</span>
+            <span id="loadStatus" class="load-status" role="status" aria-live="polite" aria-atomic="true"></span>
           </div>
         </div>
       </div>
       
-      <div id="scrollContainer" class="scroll-container"></div>
+      <div id="scrollContainer" class="scroll-container" role="feed" aria-label="聊天记录" aria-busy="true" tabindex="0"></div>
       
     </div>
     
-    <div class="image-preview" id="imagePreview">
-      <img id="imagePreviewTarget" alt="预览" />
+    <div class="image-preview" id="imagePreview" role="dialog" aria-modal="true" aria-label="图片预览">
+      <img id="imagePreviewTarget" alt="预览" tabindex="-1" />
     </div>
 
     <!-- Data Injection -->
     <script>
-      window.WEFLOW_DATA = [
-`);
+      window.WEFLOW_MANIFEST = ${serializeHtmlScriptJson(chunkManifest)};
+      window.WEFLOW_DATA = ${useExternalChunks ? 'null;' : '[\n'}`);
 
       // Pre-build avatar HTML lookup to avoid per-message rebuilds
       const avatarHtmlCache = new Map<string, string>()
@@ -303,14 +328,14 @@ export class HtmlFormatter {
         if (cached !== undefined) return cached
         const avatarData = avatarMap.get(username)
         const html = avatarData
-          ? `<img src="${escapeAttribute(encodeURI(avatarData))}" alt="${escapeAttribute(name)}" />`
+          ? `<img src="${escapeAttribute(encodeURI(avatarData))}" alt="${escapeAttribute(name)}" loading="lazy" decoding="async" />`
           : `<span>${escapeHtml(getAvatarFallback(name))}</span>`
         avatarHtmlCache.set(username, html)
         return html
       }
 
-      // Write messages in buffered chunks
-      const WRITE_BATCH = 100
+      // Write messages in bounded data chunks. Large exports keep the HTML shell small.
+      const INLINE_WRITE_BATCH = 100
       let writeBuf: string[] = []
 
       for (let i = 0; i < totalMessages; i++) {
@@ -401,15 +426,15 @@ export class HtmlFormatter {
         let mediaHtml = ''
         if (mediaItem?.kind === 'image') {
           const mediaPath = escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))
-          mediaHtml = `<img class="message-media image previewable" src="${mediaPath}" data-full="${mediaPath}" alt="${escapeAttribute(typeName)}" />`
+          mediaHtml = `<img class="message-media image previewable" src="${mediaPath}" data-full="${mediaPath}" alt="${escapeAttribute(typeName)}" loading="lazy" decoding="async" />`
         } else if (mediaItem?.kind === 'emoji') {
           const mediaPath = escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))
-          mediaHtml = `<img class="message-media emoji previewable" src="${mediaPath}" data-full="${mediaPath}" alt="${escapeAttribute(typeName)}" />`
+          mediaHtml = `<img class="message-media emoji previewable" src="${mediaPath}" data-full="${mediaPath}" alt="${escapeAttribute(typeName)}" loading="lazy" decoding="async" />`
         } else if (mediaItem?.kind === 'voice') {
-          mediaHtml = `<audio class="message-media audio" controls src="${escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))}"></audio>`
+          mediaHtml = `<audio class="message-media audio" controls preload="none" src="${escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))}"></audio>`
         } else if (mediaItem?.kind === 'video') {
           const posterAttr = mediaItem.posterDataUrl ? ` poster="${escapeAttribute(mediaItem.posterDataUrl)}"` : ''
-          mediaHtml = `<video class="message-media video" controls preload="metadata"${posterAttr} src="${escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))}"></video>`
+          mediaHtml = `<video class="message-media video" controls preload="none"${posterAttr} src="${escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))}"></video>`
         } else if (mediaItem?.kind === 'file') {
           const mediaPath = escapeAttribute(encodeURI(this.exportService.formatExportMediaPath(mediaItem.relativePath, options, 'url')))
           const fileName = escapeHtml(path.basename(mediaItem.relativePath.replace(/\\/g, '/')) || '文件附件')
@@ -454,7 +479,18 @@ export class HtmlFormatter {
         writeBuf.push(serializeHtmlScriptJson(itemObj))
 
         // Flush buffer periodically
-        if (writeBuf.length >= WRITE_BATCH || i === sortedMessages.length - 1) {
+        if (useExternalChunks && (writeBuf.length >= HTML_DATA_CHUNK_SIZE || i === sortedMessages.length - 1)) {
+          const chunkIndex = Math.floor(i / HTML_DATA_CHUNK_SIZE)
+          const descriptor = chunkManifest.chunks[chunkIndex]
+          const chunkPath = path.join(dataDirectoryPath, `chunk-${String(chunkIndex).padStart(6, '0')}.js`)
+          await this.exportService.recordCreatedFileBeforeWrite(chunkPath, control)
+          await fs.promises.writeFile(
+            chunkPath,
+            `window.__WEFLOW_CHUNK_LOADED__(${descriptor.i},[${writeBuf.join(',\n')}]);\n`,
+            'utf-8'
+          )
+          writeBuf = []
+        } else if (!useExternalChunks && (writeBuf.length >= INLINE_WRITE_BATCH || i === sortedMessages.length - 1)) {
           const isLast = i === sortedMessages.length - 1
           const chunk = writeBuf.join(',\n') + (isLast ? '\n' : ',\n')
           await writePromise(chunk)
@@ -475,7 +511,8 @@ export class HtmlFormatter {
         }
       }
 
-      await writePromise(`];
+      const dataScriptClose = useExternalChunks ? '' : ']'
+      await writePromise(`${dataScriptClose};
     </script>
 
     <script>
@@ -485,14 +522,12 @@ export class HtmlFormatter {
       const timeInput = document.getElementById('timeInput')
       const jumpBtn = document.getElementById('jumpBtn')
       const resultCount = document.getElementById('resultCount')
+      const loadStatus = document.getElementById('loadStatus')
       const imagePreview = document.getElementById('imagePreview')
       const imagePreviewTarget = document.getElementById('imagePreviewTarget')
       const container = document.getElementById('scrollContainer')
       let imageZoom = 1
-
-      // Initial Data
-      let allData = window.WEFLOW_DATA || [];
-      let currentList = allData;
+      let previewTrigger = null
 
       // Render Item Function
       const renderItem = (item, index) => {
@@ -500,61 +535,102 @@ export class HtmlFormatter {
          const platformIdAttr = item.p ? \` data-platform-message-id="\${item.p}"\` : '';
          const replyToAttr = item.r ? \` data-reply-to-message-id="\${item.r}"\` : '';
          return \`
-          <div class="message \${isSenderMe ? 'sent' : 'received'}" data-index="\${item.i}"\${platformIdAttr}\${replyToAttr}>
+          <article class="message \${isSenderMe ? 'sent' : 'received'}" data-index="\${item.i}" aria-posinset="\${item.i}" aria-setsize="\${window.WEFLOW_MANIFEST.total}"\${platformIdAttr}\${replyToAttr}>
             <div class="message-row">
               <div class="avatar">\${item.a}</div>
               <div class="bubble">
                 \${item.b}
               </div>
             </div>
-          </div>
+          </article>
          \`;
       };
-      
-      const renderer = new ChunkedRenderer(container, currentList, renderItem);
 
-      const updateCount = () => {
-        resultCount.textContent = \`共 \${currentList.length} 条\`
+      const setStatus = (text) => {
+        loadStatus.textContent = text || ''
       }
 
-      // Search Logic
-      let searchTimeout;
+      const store = new WeflowChunkStore(window.WEFLOW_MANIFEST, window.WEFLOW_DATA)
+      const globalSource = createWeflowGlobalSource(window.WEFLOW_MANIFEST, store)
+      let activeSource = globalSource
+      const renderer = new BoundedInfiniteRenderer(container, renderItem, {
+        onStatus: (text) => setStatus(text)
+      })
+
+      const updateCount = () => {
+        resultCount.textContent = \`共 \${activeSource.total} 条\`
+      }
+
+      void renderer.setSource(globalSource, 0)
+
+      // Search scans data chunks cooperatively so typing and scrolling stay responsive.
+      let searchTimeout
+      let searchRun = 0
       searchInput.addEventListener('input', () => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-          const keyword = searchInput.value.trim().toLowerCase();
+        clearTimeout(searchTimeout)
+        const scheduledRun = ++searchRun
+        searchTimeout = setTimeout(async () => {
+          const keyword = searchInput.value.trim().toLowerCase()
           if (!keyword) {
-            currentList = allData;
-          } else {
-            currentList = allData.filter(item => {
-               return item.b.toLowerCase().includes(keyword); 
-            });
+            activeSource = globalSource
+            await renderer.setSource(globalSource, 0)
+            updateCount()
+            return
           }
-          renderer.setData(currentList);
-          updateCount();
-        }, 300);
+          setStatus('正在搜索…')
+          const searchSource = await createWeflowSearchSource(
+            globalSource,
+            store,
+            keyword,
+            () => scheduledRun !== searchRun,
+            (current, total, matches) => {
+              if (scheduledRun === searchRun) {
+                setStatus('正在搜索 ' + current + '/' + total + ' 个数据块，已找到 ' + matches + ' 条')
+              }
+            }
+          )
+          if (!searchSource || scheduledRun !== searchRun) return
+          activeSource = searchSource
+          await renderer.setSource(searchSource, 0)
+          if (scheduledRun !== searchRun) return
+          updateCount()
+          setStatus('')
+        }, 300)
       })
 
       // Jump Logic
-      jumpBtn.addEventListener('click', () => {
+      const jumpToSelectedTime = async () => {
         const value = timeInput.value
         if (!value) return
         const target = Math.floor(new Date(value).getTime() / 1000)
-        renderer.scrollToTime(target);
+        if (!Number.isFinite(target)) return
+        clearTimeout(searchTimeout)
+        searchRun++
+        searchInput.value = ''
+        activeSource = globalSource
+        updateCount()
+        const chunkIndex = globalSource.findChunkByTime(target)
+        if (chunkIndex >= 0) await renderer.setSource(globalSource, chunkIndex, target)
+      }
+      jumpBtn.addEventListener('click', () => void jumpToSelectedTime())
+      timeInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') void jumpToSelectedTime()
       })
 
       // Image Preview (Delegation)
       container.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.classList.contains('previewable')) {
+        const target = e.target
+        if (target instanceof Element && target.classList.contains('previewable')) {
            const full = target.getAttribute('data-full')
            if (!full) return
+           previewTrigger = target
            imagePreviewTarget.src = full
            imageZoom = 1
            imagePreviewTarget.style.transform = 'scale(1)'
            imagePreview.classList.add('active')
+           imagePreviewTarget.focus()
         }
-      });
+      })
 
       imagePreviewTarget.addEventListener('click', (event) => {
         event.stopPropagation()
@@ -573,11 +649,18 @@ export class HtmlFormatter {
         imagePreviewTarget.style.transform = \`scale(\${imageZoom})\`
       }, { passive: false })
 
-      imagePreview.addEventListener('click', () => {
+      const closeImagePreview = () => {
         imagePreview.classList.remove('active')
         imagePreviewTarget.src = ''
         imageZoom = 1
         imagePreviewTarget.style.transform = 'scale(1)'
+        if (previewTrigger instanceof HTMLElement) previewTrigger.focus()
+        previewTrigger = null
+      }
+
+      imagePreview.addEventListener('click', closeImagePreview)
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && imagePreview.classList.contains('active')) closeImagePreview()
       })
 
       updateCount()
@@ -601,7 +684,7 @@ export class HtmlFormatter {
             estimatedTotalMessages: totalMessages,
             collectedMessages: totalMessages,
             exportedMessages: totalMessages,
-            writtenFiles: 1
+            writtenFiles: 1 + (useExternalChunks ? chunkManifest.chunks.length : 0)
           })
           resolve({ success: true })
         })

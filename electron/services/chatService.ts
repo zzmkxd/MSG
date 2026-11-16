@@ -1,6 +1,7 @@
 import { join, dirname, basename, extname } from 'path'
 import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, watch, promises as fsPromises } from 'fs'
 import { createRequire } from 'module'
+import { homedir } from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as https from 'https'
@@ -8,6 +9,20 @@ import * as http from 'http'
 import * as fzstd from 'fzstd'
 import * as crypto from 'crypto'
 import { app, BrowserWindow, dialog } from 'electron'
+
+/** Worker/headless may lack Electron `app`; env → app → ~/Documents */
+function runtimeDocumentsPath(): string {
+  const configured = String(process.env.MSG_DOCUMENTS_PATH || process.env.WEFLOW_DOCUMENTS_PATH || '').trim()
+  if (configured) return configured
+  try {
+    const getPath = (app as unknown as { getPath?: (name: string) => string } | undefined)?.getPath
+    const documents = typeof getPath === 'function' ? getPath.call(app, 'documents') : ''
+    if (documents) return documents
+  } catch {
+    // Electron worker processes run in Node mode and intentionally have no app object.
+  }
+  return join(homedir(), 'Documents')
+}
 import { ConfigService } from './config'
 import { wcdbService } from './wcdbService'
 import { MessageCacheService } from './messageCacheService'
@@ -654,8 +669,10 @@ class ChatService {
           console.error('[ChatService] 数据库监听回调失败:', error)
         }
       }
-      const windows = BrowserWindow.getAllWindows()
-      // 广播给所有渲染进程窗口
+      // Headless / worker 可能无 BrowserWindow；监控仍有用，仅跳过渲染广播
+      const windows = BrowserWindow && typeof BrowserWindow.getAllWindows === 'function'
+        ? BrowserWindow.getAllWindows()
+        : []
       windows.forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('wcdb-change', { type, json })
@@ -2757,20 +2774,22 @@ class ChatService {
     before: Message[]
     after: Message[]
     requested: number
+    hasMoreBefore?: boolean
+    hasMoreAfter?: boolean
     error?: string
   }> {
-    const requested = Math.max(1, Math.min(200, Math.floor(Number(totalContextCount) || 50)))
+    const requested = Math.max(1, Math.min(400, Math.floor(Number(totalContextCount) || 50)))
     const targetCreateTime = Math.floor(Number(target?.createTime || 0))
     if (!sessionId || targetCreateTime <= 0) {
       return { success: false, before: [], after: [], requested, error: '无效的目标消息' }
     }
 
-    const collect = async (ascending: boolean): Promise<Message[]> => {
+    const collect = async (ascending: boolean): Promise<{ messages: Message[]; hasMore: boolean }> => {
       let cursor: number | undefined
       try {
         const cursorResult = await wcdbService.openMessageCursor(
           sessionId,
-          Math.min(240, Math.max(60, requested + 20)),
+          Math.min(480, Math.max(60, requested + 20)),
           ascending,
           ascending ? targetCreateTime : 0,
           ascending ? 0 : targetCreateTime + 1
@@ -2785,12 +2804,13 @@ class ChatService {
         }
         const targetLocalId = Math.floor(Number(target?.localId || 0))
         const targetMessageKey = String(target?.messageKey || '').trim()
-        return (collected.messages || []).filter((message) => {
+        const messages = (collected.messages || []).filter((message) => {
           const sameLocalId = targetLocalId > 0 && Number(message.localId || 0) === targetLocalId
           const sameCreateTime = Number(message.createTime || 0) === targetCreateTime
           const sameKey = Boolean(targetMessageKey && message.messageKey === targetMessageKey)
           return !(sameKey || (sameLocalId && sameCreateTime))
         })
+        return { messages, hasMore: collected.hasMore === true }
       } finally {
         if (cursor) {
           await wcdbService.closeMessageCursor(cursor).catch(() => {})
@@ -2803,10 +2823,10 @@ class ChatService {
         collect(false),
         collect(true)
       ])
-      const beforeCandidates = beforeCandidatesRaw
+      const beforeCandidates = beforeCandidatesRaw.messages
         .filter((message) => Number(message.createTime || 0) <= targetCreateTime)
         .sort((a, b) => (a.createTime - b.createTime) || (a.sortSeq - b.sortSeq))
-      const afterCandidates = afterCandidatesRaw
+      const afterCandidates = afterCandidatesRaw.messages
         .filter((message) => Number(message.createTime || 0) >= targetCreateTime)
         .sort((a, b) => (a.createTime - b.createTime) || (a.sortSeq - b.sortSeq))
 
@@ -2822,7 +2842,9 @@ class ChatService {
         success: true,
         before: beforeCandidates.slice(Math.max(0, beforeCandidates.length - finalBefore)),
         after: afterCandidates.slice(0, finalAfter),
-        requested
+        requested,
+        hasMoreBefore: beforeCandidatesRaw.hasMore || beforeCandidates.length > finalBefore,
+        hasMoreAfter: afterCandidatesRaw.hasMore || afterCandidates.length > finalAfter,
       }
     } catch (error) {
       return {
@@ -8023,7 +8045,7 @@ class ChatService {
       return join(cachePath, 'Voices')
     }
     // 回退到默认目录
-    const documentsPath = app.getPath('documents')
+    const documentsPath = runtimeDocumentsPath()
     return join(documentsPath, 'WeFlow', 'Voices')
   }
 
@@ -8033,7 +8055,7 @@ class ChatService {
       return join(cachePath, 'Emojis')
     }
     // 回退到默认目录
-    const documentsPath = app.getPath('documents')
+    const documentsPath = runtimeDocumentsPath()
     return join(documentsPath, 'WeFlow', 'Emojis')
   }
 
@@ -9809,7 +9831,7 @@ class ChatService {
   /** 获取持久化转写缓存文件路径 */
   private getTranscriptCachePath(): string {
     const cachePath = this.configService.get('cachePath')
-    const base = cachePath || join(app.getPath('documents'), 'WeFlow')
+    const base = cachePath || join(runtimeDocumentsPath(), 'WeFlow')
     return join(base, 'Voices', 'transcripts.json')
   }
 
