@@ -31,7 +31,7 @@ Ref-Code 隔离工作树：MSG × WeFlow **复合修复**试验区（不污染�
 - **P2 Phase2**（pass）：`sessionStatsCacheService` persistGeneration + tmp/rename + EPERM 退避
 - **P2 Phase3**（pass）：`jsonlLineReader` + ExportContext（禁 readline U+2028/2029 切裂）
 - **P2 续**（pass）：imageDownload whitelist 归一；`runtimeDocumentsPath`；`getMessagesAround` 400/480+hasMore；groupMyMessageCount 原子写
-- **P2 CSS+P0-12/13**（building→pass）：App flex/route-loading；ConfirmDialog reduced-motion；Sidebar lock 对齐；`-2` 自愈；dbSignature 含 wal/shm
+- **P2 CSS+P0-12/13**（pass · `11f0688` / master `9318eb2`）：App flex/route-loading；ConfirmDialog reduced-motion；Sidebar lock；`-2` 自愈；dbSignature 含 wal/shm
 - Orchestrator `registerLogicalOutputPath`：API 已有，接线待做
 - 轨 B：**不对上游提 PR**（用户 2026-11-16 定）
 
