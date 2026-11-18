@@ -27,7 +27,7 @@ Electron 43 + TypeScript + React 19 + WCDB (Native C++ Bridge) + koffi FFI
 
 ### 下载安装
 
-前往 [Releases](https://github.com/zzmkxd/MSG/releases) 下载 `MSG-0.1.0-Setup.exe` 安装。
+前往 [Releases](https://github.com/zzmkxd/MSG/releases) 下载最新 `MSG-<version>-Setup.exe` 安装（当前列车见 `CHANGELOG.md`，勿再使用历史的 `0.1.0` 包名）。
 
 ### 开发构建
 

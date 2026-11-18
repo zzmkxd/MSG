@@ -48,3 +48,8 @@ audit/
 
 # 过期厂商 DLL 的本地备份（scripts/build-native-db.cjs 生成）
 resources/wcdb/win32/x64/wcdb_api.dll.vendor-expired.bak
+
+# 探测临时产物（含 SNS token / 视频采样，不入库）
+scripts/.probe-*
+scripts/.video-*
+scripts/.sample-manifest.json
