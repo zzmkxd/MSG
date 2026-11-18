@@ -646,25 +646,91 @@ class GroupAnalyticsService {
     return undefined
   }
 
+  /**
+   * Resolve sender counts from getGroupStats payload.
+   * Sessions may be keyed by chatroomId OR by numeric idMap ids (same pitfall as analyticsService.normalizeAggregateSessions).
+   */
+  private resolveGroupSenderEntries(
+    groupStats: any,
+    chatroomId: string
+  ): Array<{ senderKey: string; count: number; username: string }> {
+    if (!groupStats || typeof groupStats !== 'object') return []
+
+    const sessions =
+      groupStats.sessions && typeof groupStats.sessions === 'object'
+        ? (groupStats.sessions as Record<string, any>)
+        : {}
+    const topIdMap =
+      groupStats.idMap && typeof groupStats.idMap === 'object'
+        ? (groupStats.idMap as Record<string, string>)
+        : {}
+
+    const target = String(chatroomId || '').trim()
+    let sessionStats: any =
+      (target && (sessions[target] || sessions[String(target)])) || null
+
+    if (!sessionStats) {
+      const keys = Object.keys(sessions)
+      const numericKeys = keys.length > 0 && keys.every((k) => /^\d+$/.test(k))
+      if (numericKeys && target) {
+        for (const [id, stat] of Object.entries(sessions)) {
+          const mapped = String(topIdMap[id] || id || '').trim()
+          if (mapped === target) {
+            sessionStats = stat
+            break
+          }
+        }
+      }
+    }
+
+    if (!sessionStats) {
+      const keys = Object.keys(sessions)
+      if (keys.length === 1) {
+        sessionStats = sessions[keys[0]]
+      }
+    }
+
+    const sessionIdMap =
+      sessionStats && typeof sessionStats === 'object' && sessionStats.idMap && typeof sessionStats.idMap === 'object'
+        ? (sessionStats.idMap as Record<string, string>)
+        : topIdMap
+
+    const senderRaw: Record<string, unknown> =
+      sessionStats && typeof sessionStats === 'object' && sessionStats.senders && typeof sessionStats.senders === 'object'
+        ? (sessionStats.senders as Record<string, unknown>)
+        : groupStats.senders && typeof groupStats.senders === 'object'
+          ? (groupStats.senders as Record<string, unknown>)
+          : {}
+
+    const merged = new Map<string, { senderKey: string; count: number; username: string }>()
+    for (const [senderKey, rawCount] of Object.entries(senderRaw)) {
+      const count = this.toNonNegativeInteger(rawCount)
+      if (count <= 0) continue
+      const mapped = typeof sessionIdMap[senderKey] === 'string' ? String(sessionIdMap[senderKey]).trim() : ''
+      const username = mapped || String(senderKey || '').trim()
+      if (!username) continue
+      const prev = merged.get(username)
+      if (prev) {
+        prev.count += count
+      } else {
+        merged.set(username, { senderKey, count, username })
+      }
+    }
+    return Array.from(merged.values())
+  }
+
   private async buildGroupMessageCountLookup(chatroomId: string): Promise<Map<string, number>> {
     const lookup = new Map<string, number>()
     const result = await wcdbService.getGroupStats(chatroomId, 0, 0)
     if (!result.success || !result.data) return lookup
 
-    const sessionData = result.data?.sessions?.[chatroomId]
-    if (!sessionData || !sessionData.senders) return lookup
-
-    const idMap = result.data.idMap || {}
-    for (const [senderId, rawCount] of Object.entries(sessionData.senders as Record<string, number>)) {
-      const username = String(idMap[senderId] || senderId || '').trim()
-      if (!username) continue
-      const count = this.toNonNegativeInteger(rawCount)
-      const keys = this.buildIdCandidates([username])
+    for (const entry of this.resolveGroupSenderEntries(result.data, chatroomId)) {
+      const keys = this.buildIdCandidates([entry.username])
       for (const key of keys) {
         const normalized = key.toLowerCase()
         const prev = lookup.get(normalized) || 0
-        if (count > prev) {
-          lookup.set(normalized, count)
+        if (entry.count > prev) {
+          lookup.set(normalized, entry.count)
         }
       }
     }
@@ -1392,21 +1458,14 @@ class GroupAnalyticsService {
       const result = await wcdbService.getGroupStats(chatroomId, startTime || 0, endTime || 0)
       if (!result.success || !result.data) return { success: false, error: result.error || '聚合失败' }
 
-      const d = result.data
-      const sessionData = d.sessions[chatroomId]
-      if (!sessionData || !sessionData.senders) return { success: true, data: [] }
-
-      const idMap = d.idMap || {}
-      const senderEntries = Object.entries(sessionData.senders as Record<string, number>)
+      const senderEntries = this.resolveGroupSenderEntries(result.data, chatroomId)
+      if (senderEntries.length === 0) return { success: true, data: [] }
 
       const rankings: GroupMessageRank[] = senderEntries
-        .map(([id, count]) => {
-          const username = idMap[id] || id
-          return {
-            member: { username, displayName: username }, // Display name will be resolved below
-            messageCount: count
-          }
-        })
+        .map((entry) => ({
+          member: { username: entry.username, displayName: entry.username },
+          messageCount: entry.count
+        }))
         .sort((a, b) => b.messageCount - a.messageCount)
         .slice(0, limit)
 
@@ -1442,9 +1501,13 @@ class GroupAnalyticsService {
       const result = await wcdbService.getGroupStats(chatroomId, startTime || 0, endTime || 0)
       if (!result.success || !result.data) return { success: false, error: result.error || '聚合失败' }
 
+      const hourlyRaw =
+        result.data.hourly && typeof result.data.hourly === 'object'
+          ? (result.data.hourly as Record<string | number, number>)
+          : {}
       const hourlyDistribution: Record<number, number> = {}
       for (let i = 0; i < 24; i++) {
-        hourlyDistribution[i] = result.data.hourly[i] || 0
+        hourlyDistribution[i] = Number(hourlyRaw[i] || hourlyRaw[String(i)] || 0) || 0
       }
 
       return { success: true, data: { hourlyDistribution } }
@@ -1461,7 +1524,10 @@ class GroupAnalyticsService {
       const result = await wcdbService.getGroupStats(chatroomId, startTime || 0, endTime || 0)
       if (!result.success || !result.data) return { success: false, error: result.error || '聚合失败' }
 
-      const typeCountsRaw = result.data.typeCounts as Record<string, number>
+      const typeCountsRaw =
+        result.data.typeCounts && typeof result.data.typeCounts === 'object'
+          ? (result.data.typeCounts as Record<string, number>)
+          : {}
       const mainTypes = [1, 3, 34, 43, 47, 49]
       const typeNames: Record<number, string> = {
         1: '文本', 3: '图片', 34: '语音', 43: '视频', 47: '表情包', 49: '链接/文件'

@@ -75,8 +75,17 @@ export class VoiceTranscribeService {
 
   private resolveModelDir(): string {
     const configured = this.configService.get('whisperModelDir') as string | undefined
-    if (configured) return configured
-    return join(app.getPath('documents'), 'WeFlow', 'models', 'sensevoice')
+    if (configured && String(configured).trim()) return String(configured).trim()
+    const documents = app.getPath('documents')
+    // MSG 默认目录；若旧 WeFlow 目录已有模型则复用，避免改名后「打包后模型没了」
+    const msgDir = join(documents, 'MSG', 'models', 'sensevoice')
+    const weflowDir = join(documents, 'WeFlow', 'models', 'sensevoice')
+    const hasModel = (dir: string) =>
+      existsSync(join(dir, SENSEVOICE_MODEL.files.model)) &&
+      existsSync(join(dir, SENSEVOICE_MODEL.files.tokens))
+    if (hasModel(msgDir)) return msgDir
+    if (hasModel(weflowDir)) return weflowDir
+    return msgDir
   }
 
   private resolveModelPath(fileName: string): string {

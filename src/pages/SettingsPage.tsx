@@ -2582,8 +2582,8 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const renderModelsTab = () => (
     <div className="tab-content">
       <div className="form-group">
-        <label>语音识别模型 (Whisper)</label>
-        <span className="form-hint">用于语音消息转文字功能</span>
+        <label>语音识别模型 (SenseVoice)</label>
+        <span className="form-hint">用于语音消息转文字。模型约 245MB，不随安装包分发，需在此下载到「文档\MSG\models\sensevoice」（若曾用 WeFlow 目录也会自动复用）。</span>
 
         <div className="setting-control vertical has-border">
           <div className="model-status-card">

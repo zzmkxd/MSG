@@ -646,8 +646,12 @@ function ResourcesPage() {
   const [error, setError] = useState('')
   const [batchBusy, setBatchBusy] = useState(false)
   const [actionMessage, setActionMessage] = useState('')
+  const [totalEstimated, setTotalEstimated] = useState<number | null>(null)
+  const [indexStatus, setIndexStatus] = useState<'idle' | 'building' | 'ready' | 'error'>('idle')
+  const [indexKey, setIndexKey] = useState('')
   const [sessionNameMap, setSessionNameMap] = useState<Record<string, string>>({})
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const indexKeyRef = useRef('')
 
   const previewPathMapRef = useRef<Record<string, string>>({})
   const previewUpdateMapRef = useRef<Record<string, boolean>>({})
@@ -1314,143 +1318,170 @@ function ResourcesPage() {
     return unsubscribe
   }, [bumpRuntimeCounter, getScopedDatIdentity, isLikelyThumbnailPreview, queuePreviewPatch])
 
-  const loadStream = useCallback(async (reset: boolean) => {
-    if (!reset) {
-      if (loadingRef.current || loadingMoreRef.current || !hasMoreRef.current) {
-        bumpRuntimeCounter('loadMoreSkipped')
-        return
+  const applyIndexedItems = useCallback((incoming: MediaStreamItem[], mode: 'replace' | 'append') => {
+    if (mode === 'replace') {
+      const nextLoadedKeys = new Set<string>()
+      const uniqueIncoming: MediaStreamItem[] = []
+      for (const item of incoming) {
+        const meta = getMeta(item)
+        if (nextLoadedKeys.has(meta.itemKey)) continue
+        nextLoadedKeys.add(meta.itemKey)
+        uniqueIncoming.push(item)
       }
-      bumpRuntimeCounter('loadMoreRequests')
-      loadingMoreRef.current = true
-    } else {
-      bumpRuntimeCounter('loadResets')
-      loadingRef.current = true
-      loadingMoreRef.current = false
+      resetResourceIndexes(uniqueIncoming)
+      setItems(uniqueIncoming)
+      setSelectedKeys(clearSet)
+      bumpRuntimeCounter('mediaStreamRowsLoaded', uniqueIncoming.length)
+      return
     }
+    const uniqueIncoming: MediaStreamItem[] = []
+    const loadedKeys = loadedItemKeysRef.current
+    for (const item of incoming) {
+      const meta = getMeta(item)
+      if (loadedKeys.has(meta.itemKey)) continue
+      loadedKeys.add(meta.itemKey)
+      addResourceIndexItem(item, meta)
+      uniqueIncoming.push(item)
+    }
+    bumpRuntimeCounter('mediaStreamRowsLoaded', uniqueIncoming.length)
+    if (uniqueIncoming.length > 0) {
+      setItems((prev) => prev.concat(uniqueIncoming))
+    }
+  }, [addResourceIndexItem, bumpRuntimeCounter, getMeta, resetResourceIndexes])
+
+  const loadStream = useCallback(async (reset: boolean, forceRebuild = false) => {
+    // 索引模式下不再靠滚动分页；reset/刷新才重建或复用缓存
+    if (!reset) {
+      bumpRuntimeCounter('loadMoreSkipped')
+      return
+    }
+    bumpRuntimeCounter('loadResets')
+    loadingRef.current = true
+    loadingMoreRef.current = false
     const requestId = streamRequestIdRef.current + 1
     streamRequestIdRef.current = requestId
-    if (reset) {
-      const previousScope = preloadScopeRef.current
-      preloadScopeRef.current = `resources-${requestId}-${Date.now()}`
-      resetAsyncResourceWork({ clearIndexes: true })
-      resetResourceDiagnosticsWindow()
-      void window.electronAPI.image.cancelPreloadScope(previousScope)
-    }
-    if (reset) {
-      setLoading(true)
-      setLoadingMore(false)
-      setItems(clearArray)
-      setSelectedKeys(clearSet)
-      nextOffsetRef.current = 0
-      hasMoreRef.current = false
-      setNextOffset(0)
-      setHasMore(false)
-    } else {
-      setLoadingMore(true)
-    }
-    if (reset) {
-      setError('')
-      setActionMessage('')
+    const previousScope = preloadScopeRef.current
+    preloadScopeRef.current = `resources-${requestId}-${Date.now()}`
+    resetAsyncResourceWork({ clearIndexes: true })
+    resetResourceDiagnosticsWindow()
+    void window.electronAPI.image.cancelPreloadScope(previousScope)
+
+    setLoading(true)
+    setLoadingMore(false)
+    setItems(clearArray)
+    setSelectedKeys(clearSet)
+    nextOffsetRef.current = 0
+    hasMoreRef.current = true
+    setNextOffset(0)
+    setHasMore(true)
+    setError('')
+    setActionMessage('')
+    setTotalEstimated(null)
+    setIndexStatus('building')
+    setIndexKey('')
+    indexKeyRef.current = ''
+
+    const filter = {
+      sessionId: selectedContact === 'all' ? undefined : selectedContact,
+      mediaType: tab as 'image' | 'video',
+      beginTimestamp: getRangeTimestampStart(dateStart),
+      endTimestamp: getRangeTimestampEnd(dateEnd)
     }
 
     try {
-      if (reset) {
-        const connectResult = await window.electronAPI.chat.connect()
-        if (requestId !== streamRequestIdRef.current) return
-        if (!connectResult.success) {
-          setError(connectResult.error || '连接数据库失败')
-          return
-        }
-      }
-      const requestOffset = reset ? 0 : nextOffsetRef.current
-      const streamLoadStartedAt = performance.now()
-      const streamResult = await window.electronAPI.chat.getMediaStream({
-        sessionId: selectedContact === 'all' ? undefined : selectedContact,
-        mediaType: tab,
-        beginTimestamp: getRangeTimestampStart(dateStart),
-        endTimestamp: getRangeTimestampEnd(dateEnd),
-        offset: requestOffset,
-        limit: PAGE_SIZE
-      })
+      const connectResult = await window.electronAPI.chat.connect()
       if (requestId !== streamRequestIdRef.current) return
-      const streamLoadMs = Math.max(0, Math.round((performance.now() - streamLoadStartedAt) * 10) / 10)
-      bumpRuntimeCounter('mediaStreamLoadSamples')
-      bumpRuntimeCounter('mediaStreamLoadMsTotal', streamLoadMs)
-      if (streamLoadMs > runtimeCountersRef.current.mediaStreamMaxLoadMs) {
-        runtimeCountersRef.current.mediaStreamMaxLoadMs = streamLoadMs
-      }
-      if (streamResult.pageCacheHit || streamResult.streamSource === 'pageCache') {
-        bumpRuntimeCounter('mediaStreamPageCacheHits')
-      } else if (streamResult.inflightMerged || streamResult.streamSource === 'inflight') {
-        bumpRuntimeCounter('mediaStreamInflightMerges')
-      } else if (streamResult.success) {
-        bumpRuntimeCounter('mediaStreamNativeLoads')
-      }
-
-      if (!streamResult.success) {
-        setError(streamResult.error || '加载失败')
+      if (!connectResult.success) {
+        setError(connectResult.error || '连接数据库失败')
+        setIndexStatus('error')
         return
       }
 
-      const incoming = (streamResult.items || []) as MediaStreamItem[]
-      bumpRuntimeCounter('mediaStreamRowsLoaded', incoming.length)
-      if (reset) {
-        const nextLoadedKeys = new Set<string>()
-        const uniqueIncoming: MediaStreamItem[] = []
-        for (const item of incoming) {
-          const meta = getMeta(item)
-          if (nextLoadedKeys.has(meta.itemKey)) continue
-          nextLoadedKeys.add(meta.itemKey)
-          uniqueIncoming.push(item)
+      const totals = await window.electronAPI.chat.getMediaTotals(filter)
+      if (requestId !== streamRequestIdRef.current) return
+      if (totals.success && Number.isFinite(Number(totals.total))) {
+        setTotalEstimated(Math.max(0, Math.floor(Number(totals.total))))
+      }
+
+      const started = await window.electronAPI.chat.startMediaIndex(filter, forceRebuild)
+      if (requestId !== streamRequestIdRef.current) return
+      if (started?.key) {
+        setIndexKey(started.key)
+        indexKeyRef.current = started.key
+      }
+      if (started?.status === 'ready' && Array.isArray((started as any).items)) {
+        // start 若同步命中缓存，progress 事件也会再推一次；此处兜底拉快照
+        const snap = await window.electronAPI.chat.getMediaIndexSnapshot(filter)
+        if (requestId !== streamRequestIdRef.current) return
+        if (snap.success && Array.isArray(snap.items)) {
+          applyIndexedItems(snap.items as MediaStreamItem[], 'replace')
+          setIndexStatus('ready')
+          hasMoreRef.current = false
+          setHasMore(false)
+          if (Number.isFinite(Number(snap.totalEstimated))) {
+            setTotalEstimated(Math.max(0, Math.floor(Number(snap.totalEstimated))))
+          }
         }
-        bumpRuntimeCounter('mediaStreamDuplicateRows', incoming.length - uniqueIncoming.length)
-        resetResourceIndexes(uniqueIncoming)
-        setItems(uniqueIncoming)
-        setSelectedKeys(clearSet)
       } else {
-        const uniqueIncoming: MediaStreamItem[] = []
-        const loadedKeys = loadedItemKeysRef.current
-        for (const item of incoming) {
-          const meta = getMeta(item)
-          if (loadedKeys.has(meta.itemKey)) continue
-          loadedKeys.add(meta.itemKey)
-          addResourceIndexItem(item, meta)
-          uniqueIncoming.push(item)
-        }
-        bumpRuntimeCounter('mediaStreamDuplicateRows', incoming.length - uniqueIncoming.length)
-        if (uniqueIncoming.length > 0) {
-          setItems((prev) => prev.concat(uniqueIncoming))
-        }
+        setIndexStatus(started?.status || 'building')
+        setLoadingMore(started?.status === 'building')
+        loadingMoreRef.current = started?.status === 'building'
       }
-      const reportedNextOffset = Number(streamResult.nextOffset)
-      const nextOffsetValue = Number.isFinite(reportedNextOffset)
-        ? Math.max(requestOffset, reportedNextOffset)
-        : requestOffset + incoming.length
-      let hasMoreValue = Boolean(streamResult.hasMore)
-      if (hasMoreValue && nextOffsetValue <= requestOffset) {
-        bumpRuntimeCounter('mediaStreamNoProgressStops')
-        hasMoreValue = false
-      }
-      nextOffsetRef.current = nextOffsetValue
-      hasMoreRef.current = hasMoreValue
-      setNextOffset(nextOffsetValue)
-      setHasMore(hasMoreValue)
     } catch (e) {
       if (requestId !== streamRequestIdRef.current) return
       setError(String(e))
+      setIndexStatus('error')
     } finally {
       if (requestId === streamRequestIdRef.current) {
-        if (reset) loadingRef.current = false
-        else loadingMoreRef.current = false
+        loadingRef.current = false
         setLoading(false)
-        setLoadingMore(false)
       }
     }
-  }, [addResourceIndexItem, bumpRuntimeCounter, dateEnd, dateStart, getMeta, resetAsyncResourceWork, resetResourceDiagnosticsWindow, resetResourceIndexes, selectedContact, tab])
+  }, [applyIndexedItems, bumpRuntimeCounter, dateEnd, dateStart, resetAsyncResourceWork, resetResourceDiagnosticsWindow, selectedContact, tab])
 
   useEffect(() => {
-    void loadStream(true)
+    void loadStream(true, false)
   }, [loadStream])
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.chat.onMediaIndexProgress((payload) => {
+      if (!payload) return
+      if (indexKeyRef.current && payload.key && payload.key !== indexKeyRef.current) return
+      if (payload.key) {
+        indexKeyRef.current = payload.key
+        setIndexKey(payload.key)
+      }
+      if (Number.isFinite(Number(payload.totalEstimated))) {
+        setTotalEstimated(Math.max(0, Math.floor(Number(payload.totalEstimated))))
+      }
+      setIndexStatus(payload.status)
+      if (payload.status === 'error') {
+        setError(payload.error || '媒体索引失败')
+        setLoadingMore(false)
+        loadingMoreRef.current = false
+        hasMoreRef.current = false
+        setHasMore(false)
+        return
+      }
+      if (Array.isArray(payload.items) && payload.items.length > 0 && (payload.status === 'ready' || payload.fromCache)) {
+        applyIndexedItems(payload.items as MediaStreamItem[], 'replace')
+      } else if (Array.isArray(payload.itemsDelta) && payload.itemsDelta.length > 0) {
+        applyIndexedItems(payload.itemsDelta as MediaStreamItem[], 'append')
+      }
+      const building = payload.status === 'building'
+      setLoadingMore(building)
+      loadingMoreRef.current = building
+      hasMoreRef.current = building
+      setHasMore(building)
+      if (payload.status === 'ready') {
+        setLoadingMore(false)
+        loadingMoreRef.current = false
+        hasMoreRef.current = false
+        setHasMore(false)
+      }
+    })
+    return unsubscribe
+  }, [applyIndexedItems])
 
   useEffect(() => {
     let cancelled = false
@@ -1556,7 +1587,7 @@ function ResourcesPage() {
         const rows = Array.isArray(result?.rows) ? result.rows : []
         const pathPatch: Record<string, string> = {}
         const updatePatch: Record<string, boolean> = {}
-        const missUntil = Date.now() + 4500
+        const missUntil = Date.now() + 2000
         let hasPathPatch = false
         let hasUpdatePatch = false
 
@@ -1595,7 +1626,7 @@ function ResourcesPage() {
           bumpRuntimeCounter('imageResolveSuperseded')
           return
         }
-        const missUntil = Date.now() + 4500
+        const missUntil = Date.now() + 2000
         payloadItemKeys.forEach((itemKeys, index) => {
           const imageIdentity = payloadIdentities[index] || ''
           if (imageIdentity) imageCacheIdentityMissUntilRef.current[imageIdentity] = missUntil
@@ -2687,9 +2718,8 @@ function ResourcesPage() {
   }, [bumpRuntimeCounter, scheduleRangeResolve, scheduleTransientStatePrune])
 
   const handleGridEndReached = useCallback(() => {
-    if (!hasMoreRef.current || loadingRef.current || loadingMoreRef.current) return
-    void loadStream(false)
-  }, [loadStream])
+    // 列表由后台索引灌满；滚到底只提示，不再触发原生分页
+  }, [])
 
   const renderGridItem = useCallback((_: number, item: MediaStreamItem) => {
     const meta = getMeta(item)
@@ -2766,9 +2796,9 @@ function ResourcesPage() {
           </div>
         </div>
         <div className="toolbar-right">
-          <button type="button" onClick={() => void loadStream(true)} disabled={loading || loadingMore}>
-            {loading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-            刷新
+          <button type="button" onClick={() => void loadStream(true, true)} disabled={loading}>
+            {loading || indexStatus === 'building' ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+            {indexStatus === 'building' ? '索引中' : '刷新索引'}
           </button>
           <button type="button" onClick={selectAll} disabled={items.length === 0}>
             全选
@@ -2788,9 +2818,13 @@ function ResourcesPage() {
       </header>
 
       <div className="stream-summary">
-        <span>已加载 {items.length} 条</span>
+        <span>
+          已索引 {items.length.toLocaleString()} 条
+          {totalEstimated != null ? ` / 共约 ${totalEstimated.toLocaleString()} 条` : ''}
+          {indexStatus === 'building' ? '（后台建索引，可先浏览）' : indexStatus === 'ready' ? '（索引已缓存）' : ''}
+        </span>
         <span>已选 {selectedKeys.size} 条</span>
-        <span>{tab === 'image' ? '图片按时间倒序流式展示' : '视频按时间倒序流式展示'}</span>
+        <span>{tab === 'image' ? '图片按时间倒序 · 缩略图按需加载' : '视频按时间倒序 · 封面按需加载'}</span>
         {actionMessage && <span className="action-message">{actionMessage}</span>}
       </div>
 
@@ -2818,9 +2852,9 @@ function ResourcesPage() {
             endReached={handleGridEndReached}
             itemContent={renderGridItem}
           />
-          {loading && <div className="grid-refreshing"><Loader2 size={16} className="spin" /> 正在刷新...</div>}
-          {loadingMore && <div className="grid-loading-more"><Loader2 size={16} className="spin" /> 加载更多中...</div>}
-          {!hasMore && <div className="grid-end">已加载到底</div>}
+          {loading && <div className="grid-refreshing"><Loader2 size={16} className="spin" /> 正在准备索引...</div>}
+          {indexStatus === 'building' && <div className="grid-loading-more"><Loader2 size={16} className="spin" /> 索引构建中 {items.length.toLocaleString()}{totalEstimated != null ? ` / ${totalEstimated.toLocaleString()}` : ''}...</div>}
+          {indexStatus === 'ready' && <div className="grid-end">索引完成（共 {items.length.toLocaleString()} 条元数据）</div>}
         </div>
       )}
 

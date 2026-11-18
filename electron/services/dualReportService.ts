@@ -506,6 +506,8 @@ class DualReportService {
     decryptKey: string
     wxid: string
     excludeWords?: string[]
+    beginTimestamp?: number
+    endTimestamp?: number
     onProgress?: (status: string, progress: number) => void
   }): Promise<{ success: boolean; data?: DualReportData; error?: string }> {
     try {
@@ -519,8 +521,14 @@ class DualReportService {
 
       const reportYear = year <= 0 ? 0 : year
       const isAllTime = reportYear === 0
-      const startTime = isAllTime ? 0 : Math.floor(new Date(reportYear, 0, 1).getTime() / 1000)
-      const endTime = isAllTime ? 0 : Math.floor(new Date(reportYear, 11, 31, 23, 59, 59).getTime() / 1000)
+      const hasCustomRange =
+        Number.isFinite(params.beginTimestamp) || Number.isFinite(params.endTimestamp)
+      const startTime = hasCustomRange
+        ? Math.max(0, Math.floor(Number(params.beginTimestamp) || 0))
+        : (isAllTime ? 0 : Math.floor(new Date(reportYear, 0, 1).getTime() / 1000))
+      const endTime = hasCustomRange
+        ? Math.max(0, Math.floor(Number(params.endTimestamp) || 0))
+        : (isAllTime ? 0 : Math.floor(new Date(reportYear, 11, 31, 23, 59, 59).getTime() / 1000))
 
       this.reportProgress('加载联系人信息...', 10, onProgress)
       const friendName = await this.getDisplayName(friendUsername, friendUsername)

@@ -543,6 +543,18 @@ function AnnualReportWindow() {
   const endingPostCount = reportData.snsStats?.totalPosts ?? 0
   const endingReceivedChats = reportData.socialInitiative?.receivedChats ?? 0
   const endingTopPhrase = reportData.topPhrases?.[0]?.phrase || ''
+  const endingTopLiker = reportData.snsStats?.topLikers?.[0]
+  const endingTopLiked = reportData.snsStats?.topLiked?.[0]
+  const formatSecondsLabel = (seconds: number) => {
+    const value = Math.max(0, Math.round(Number(seconds) || 0))
+    if (value < 60) return `${value}s`
+    const minutes = Math.floor(value / 60)
+    const rem = value % 60
+    if (minutes < 60) return rem > 0 ? `${minutes}m ${rem}s` : `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    const remMin = minutes % 60
+    return remMin > 0 ? `${hours}h ${remMin}m` : `${hours}h`
+  }
   const COLOR = {
     accentGold: 'var(--c-gold-strong)',
     accentSoft: 'rgba(var(--c-gold-rgb), 0.58)',
@@ -634,6 +646,14 @@ function AnnualReportWindow() {
             “曾有<strong className="num-display" style={{ color: COLOR.accentGold, margin: '0 10px', fontSize: '1.5rem' }}>
               <DecodeText value={(reportData.midnightKing?.count || 0).toLocaleString()} active={currentScene === 2} />
             </strong>条消息在那些无人知晓的夜里，代替星光照亮了彼此”
+            {typeof reportData.midnightKing?.percentage === 'number' && reportData.midnightKing.percentage > 0 ? (
+              <>
+                <br />
+                <span style={{ fontSize: '0.95rem', color: COLOR.textMuted, marginTop: '10px', display: 'inline-block' }}>
+                  约占你深夜消息的 <strong className="num-display" style={{ color: COLOR.accentGold }}>{reportData.midnightKing.percentage.toFixed(1)}%</strong>
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
         {/* 活跃热力图：直接用后端已算好的 activityHeatmap.data（7×24，星期×小时），
@@ -764,7 +784,23 @@ function AnnualReportWindow() {
         </div>
         {reportData.mutualFriend ? (
           <>
-            <div className="reveal-wrap desc-text" style={{ position: 'absolute', top: '20vh' }}>
+            <div className="reveal-wrap desc-text" style={{ position: 'absolute', top: '16vh' }}>
+              {reportData.mutualFriend.avatarUrl ? (
+                <div className="reveal-inner delay-1" style={{ marginBottom: '2vh' }}>
+                  <img
+                    src={reportData.mutualFriend.avatarUrl}
+                    alt=""
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '1px solid rgba(184,148,90,0.45)',
+                      boxShadow: '0 0 24px rgba(184,148,90,0.25)'
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="reveal-inner serif delay-1" style={{ fontSize: 'clamp(3rem, 7vw, 4rem)', color: COLOR.accentGold, letterSpacing: '0.05em' }}>
                 {reportData.mutualFriend.displayName}
               </div>
@@ -824,13 +860,18 @@ function AnnualReportWindow() {
               </div>
             )}
             {reportData.responseSpeed && (
-              <div className="reveal-wrap" style={{ position: 'absolute', bottom: '22vh', right: '15vw', width: '38vw', textAlign: 'right' }}>
+              <div className="reveal-wrap" style={{ position: 'absolute', bottom: '18vh', right: '15vw', width: '38vw', textAlign: 'right' }}>
                 <div className="reveal-inner serif scene0-cn-tag delay-4" style={{ fontSize: '0.8rem', color: COLOR.textMuted, letterSpacing: '0.3em' }}>回应速度</div>
                 <div className="reveal-inner num-display delay-5" style={{ fontSize: 'clamp(3.5rem, 6vw, 5rem)', color: COLOR.accentSoft, lineHeight: '1', margin: '2vh 0' }}>
                   <DecodeText value={reportData.responseSpeed.fastestTime} active={currentScene === 6} />S
                 </div>
                 <div className="reveal-inner serif delay-6" style={{ fontSize: '1.2rem', color: COLOR.textSoft, lineHeight: '1.8' }}>
                   <strong style={{ color: COLOR.accentGold }}>{reportData.responseSpeed.fastestFriend}</strong> 回你的消息总是很快。<br />
+                  {typeof reportData.responseSpeed.avgResponseTime === 'number' && reportData.responseSpeed.avgResponseTime > 0 ? (
+                    <div style={{ margin: '0.8vh 0' }}>
+                      你平均回应约 <strong className="num-display" style={{ color: COLOR.accentGold }}>{formatSecondsLabel(reportData.responseSpeed.avgResponseTime)}</strong>
+                    </div>
+                  ) : null}
                   <span style={{ fontSize: '0.9rem', color: COLOR.textMuted }}>这世上最让人安心的默契，莫过于一句 "我在"。</span>
                 </div>
               </div>
@@ -848,25 +889,44 @@ function AnnualReportWindow() {
         </div>
 
         {reportData.longestStreak ? (
-          <div className="reveal-wrap" style={{ position: 'absolute', top: '35vh', left: '15vw', textAlign: 'left' }}>
+          <div className="reveal-wrap" style={{ position: 'absolute', top: '32vh', left: '15vw', textAlign: 'left' }}>
             <div className="reveal-inner serif scene0-cn-tag delay-1" style={{ fontSize: '0.8rem', color: COLOR.textMuted, letterSpacing: '0.3em', marginBottom: '2vh' }}>最长连续聊天</div>
             <div className="reveal-inner serif delay-2" style={{ fontSize: 'clamp(3rem, 6vw, 5rem)', color: COLOR.accentGold, letterSpacing: '0.02em' }}>
               {reportData.longestStreak.friendName}
             </div>
             <div className="reveal-inner serif delay-3" style={{ fontSize: '1.2rem', color: COLOR.textSoft, marginTop: '2vh' }}>
               你们曾连续 <strong className="num-display" style={{ color: COLOR.accentGold, fontSize: '1.8rem' }}><DecodeText value={reportData.longestStreak.days} active={currentScene === 7} /></strong> 天，聊到忘记了时间,<br />那些舍不得说再见的日夜，连成了最漫长的春天。
+              {reportData.longestStreak.startDate && reportData.longestStreak.endDate ? (
+                <>
+                  <br />
+                  <span style={{ fontSize: '0.95rem', color: COLOR.textMuted }}>
+                    {reportData.longestStreak.startDate} — {reportData.longestStreak.endDate}
+                  </span>
+                </>
+              ) : null}
             </div>
           </div>
         ) : null}
 
         {reportData.peakDay ? (
-          <div className="reveal-wrap" style={{ position: 'absolute', bottom: '30vh', right: '15vw', textAlign: 'right' }}>
+          <div className="reveal-wrap" style={{ position: 'absolute', bottom: '26vh', right: '15vw', textAlign: 'right' }}>
             <div className="reveal-inner serif scene0-cn-tag delay-4" style={{ fontSize: '0.8rem', color: COLOR.textMuted, letterSpacing: '0.3em', marginBottom: '2vh' }}>最热烈的一天</div>
             <div className="reveal-inner num-display delay-5" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', color: COLOR.accentGold, letterSpacing: '0.02em' }}>
               {reportData.peakDay.date}
             </div>
             <div className="reveal-inner serif delay-6" style={{ fontSize: '1.2rem', color: COLOR.textSoft, marginTop: '2vh' }}>
               “这一天，你们留下了 <strong className="num-display" style={{ color: COLOR.accentGold, fontSize: '1.8rem' }}>{reportData.peakDay.messageCount}</strong> 句话。<br />好像要把积攒了很久的想念，一天全都说完。”
+              {reportData.peakDay.topFriend ? (
+                <>
+                  <br />
+                  <span style={{ fontSize: '0.95rem', color: COLOR.textMuted }}>
+                    那天最常出现的是 <strong style={{ color: COLOR.accentGold }}>{reportData.peakDay.topFriend}</strong>
+                    {typeof reportData.peakDay.topFriendCount === 'number' && reportData.peakDay.topFriendCount > 0
+                      ? <>（{reportData.peakDay.topFriendCount.toLocaleString()} 条）</>
+                      : null}
+                  </span>
+                </>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -906,6 +966,15 @@ function AnnualReportWindow() {
                   MESSAGES
                 </div>
               </div>
+              {(reportData.lostFriend.earlyCount > 0 || reportData.lostFriend.lateCount > 0) ? (
+                <div className="reveal-wrap">
+                  <div className="reveal-inner delay-3" style={{ marginTop: '1.5vh', fontSize: '0.95rem', color: COLOR.textMuted, letterSpacing: '0.04em' }}>
+                    从前 <strong className="num-display" style={{ color: COLOR.accentGold }}>{reportData.lostFriend.earlyCount.toLocaleString()}</strong> 条
+                    <span style={{ margin: '0 8px', opacity: 0.5 }}>→</span>
+                    后来 <strong className="num-display" style={{ color: COLOR.accentGold }}>{reportData.lostFriend.lateCount.toLocaleString()}</strong> 条
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="s8-fragments">
@@ -1021,6 +1090,17 @@ function AnnualReportWindow() {
                 <div className="num-display" style={{ fontSize: '2.5rem', color: COLOR.accentMuted, fontWeight: 600 }}>“{endingTopPhrase}”</div>
               </div>
             </div>
+
+            {(endingTopLiker || endingTopLiked) ? (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '4vw', marginTop: '2vh', fontSize: '0.95rem', color: COLOR.paperMuted }}>
+                {endingTopLiker ? (
+                  <span>最常给你点赞：<strong style={{ color: COLOR.paperInk }}>{endingTopLiker.displayName}</strong>（{endingTopLiker.count}）</span>
+                ) : null}
+                {endingTopLiked ? (
+                  <span>你最常点赞：<strong style={{ color: COLOR.paperInk }}>{endingTopLiked.displayName}</strong>（{endingTopLiked.count}）</span>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="serif" style={{ fontSize: '1.2rem', color: 'rgba(34, 28, 16, 0.82)', marginTop: '4vh', letterSpacing: '0.05em' }}>
               “故事的最后，我们把这一切悄悄还给岁月<br />只要这些文字还在，所有的离别，就都只是一场短暂的缺席。”

@@ -9,6 +9,8 @@ interface DateRangePickerProps {
   onStartDateChange: (date: string) => void
   onEndDateChange: (date: string) => void
   onRangeComplete?: () => void
+  /** Empty start+end means unfiltered / all-time. Default label matches that semantics. */
+  emptyLabel?: string
 }
 
 const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
@@ -23,7 +25,15 @@ const QUICK_OPTIONS = [
   { label: '全部时间', days: 0 },
 ]
 
-function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChange, onRangeComplete }: DateRangePickerProps) {
+function DateRangePicker({
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
+  onRangeComplete,
+  emptyLabel = '选择时间范围'
+}: DateRangePickerProps) {
+  const isAllTime = !startDate && !endDate
   const [isOpen, setIsOpen] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectingStart, setSelectingStart] = useState(true)
@@ -64,7 +74,7 @@ function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChang
   }
 
   const getDisplayText = () => {
-    if (!startDate && !endDate) return '选择时间范围'
+    if (isAllTime) return emptyLabel
     if (startDate && endDate) return `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`
     if (startDate) return `${formatDisplayDate(startDate)} - ?`
     return `? - ${formatDisplayDate(endDate)}`
@@ -91,6 +101,8 @@ function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChang
     e.stopPropagation()
     onStartDateChange('')
     onEndDateChange('')
+    setIsOpen(false)
+    setTimeout(() => onRangeComplete?.(), 0)
   }
 
 
@@ -208,7 +220,11 @@ function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChang
             <div className="picker-dropdown-body">
           <div className="quick-options">
             {QUICK_OPTIONS.map(opt => (
-              <button key={opt.label} className="quick-option" onClick={() => handleQuickOption(opt.days)}>
+              <button
+                key={opt.label}
+                className={`quick-option${opt.days === 0 && isAllTime ? ' active' : ''}`}
+                onClick={() => handleQuickOption(opt.days)}
+              >
                 {opt.label}
               </button>
             ))}

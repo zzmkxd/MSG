@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Users, Clock, MessageSquare, Send, Inbox, Calendar, Loader2, RefreshCw, Medal, UserMinus, Search, X } from 'lucide-react'
+import { Users, Clock, MessageSquare, Send, Inbox, Calendar, Loader2, RefreshCw, Medal, UserMinus, Search, X, ImageDown } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
+import html2canvas from 'html2canvas'
 import { useAnalyticsStore } from '../stores/analyticsStore'
 import { useThemeStore } from '../stores/themeStore'
 import {
@@ -24,7 +25,12 @@ interface ExcludeCandidate {
 
 const normalizeUsername = (value: string) => value.trim().toLowerCase()
 
+const TYPE_PIE_COLORS = ['#10b981', '#3b82f6', '#a855f7', '#f59e0b', '#ec4899', '#64748b']
+
 function AnalyticsPage() {
+  const exportRootRef = useRef<HTMLDivElement>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -404,14 +410,25 @@ function AnalyticsPage() {
       { name: '视频', value: statistics.videoMessages },
       { name: '表情', value: statistics.emojiMessages },
       { name: '其他', value: statistics.otherMessages },
-    ].filter(d => d.value > 0)
+    ].filter(d => d.value > 0).map((d, index) => ({
+      ...d,
+      itemStyle: { color: TYPE_PIE_COLORS[index % TYPE_PIE_COLORS.length] }
+    }))
     return {
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)',
+        backgroundColor: 'rgba(15,23,42,0.92)',
+        borderWidth: 0,
+        textStyle: { color: '#f8fafc', fontSize: 12 }
+      },
+      color: TYPE_PIE_COLORS,
       series: [{
         type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 8, borderColor: 'transparent', borderWidth: 0 },
+        radius: ['42%', '72%'],
+        padAngle: 2,
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 10, borderColor: 'transparent', borderWidth: 0 },
         label: {
           show: true,
           formatter: '{b}\n{d}%',
@@ -426,6 +443,8 @@ function AnalyticsPage() {
           },
         },
         labelLine: {
+          length: 12,
+          length2: 8,
           lineStyle: {
             color: chartTheme.mutedText,
             shadowBlur: 0,
@@ -433,10 +452,13 @@ function AnalyticsPage() {
           },
         },
         emphasis: {
+          scale: true,
+          scaleSize: 6,
           itemStyle: {
-            shadowBlur: 0,
+            shadowBlur: 12,
             shadowOffsetX: 0,
-            shadowOffsetY: 0,
+            shadowOffsetY: 4,
+            shadowColor: 'rgba(0,0,0,0.18)',
           },
           label: {
             color: chartTheme.text,
@@ -461,12 +483,13 @@ function AnalyticsPage() {
   const getSendReceiveOption = () => {
     if (!statistics) return {}
     return {
-      tooltip: { trigger: 'item' },
+      tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f8fafc' } },
       series: [{
-        type: 'pie', radius: ['50%', '70%'], data: [
-          { name: '发送', value: statistics.sentMessages, itemStyle: { color: '#07c160' } },
-          { name: '接收', value: statistics.receivedMessages, itemStyle: { color: '#1989fa' } }
+        type: 'pie', radius: ['52%', '74%'], padAngle: 3, data: [
+          { name: '发送', value: statistics.sentMessages, itemStyle: { color: '#10b981' } },
+          { name: '接收', value: statistics.receivedMessages, itemStyle: { color: '#3b82f6' } }
         ],
+        itemStyle: { borderRadius: 10 },
         label: {
           show: true,
           formatter: '{b}: {c}',
@@ -517,10 +540,38 @@ function AnalyticsPage() {
     const hours = Array.from({ length: 24 }, (_, i) => i)
     const data = hours.map(h => timeDistribution.hourlyDistribution[h] || 0)
     return {
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: hours.map(h => `${h}时`) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data, itemStyle: { color: '#07c160', borderRadius: [4, 4, 0, 0] } }]
+      tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f8fafc' } },
+      grid: { left: 40, right: 16, top: 24, bottom: 36 },
+      xAxis: {
+        type: 'category',
+        data: hours.map(h => `${h}`),
+        axisLabel: { color: chartTheme.mutedText, fontSize: 11 },
+        axisLine: { lineStyle: { color: chartTheme.line } }
+      },
+      yAxis: {
+        type: 'value',
+        splitLine: { lineStyle: { color: chartTheme.line, type: 'dashed' } },
+        axisLabel: { color: chartTheme.mutedText }
+      },
+      series: [{
+        type: 'bar',
+        data,
+        barMaxWidth: 18,
+        itemStyle: {
+          borderRadius: [7, 7, 2, 2],
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#34d399' },
+              { offset: 1, color: '#059669' }
+            ]
+          }
+        }
+      }]
     }
   }
 
@@ -558,9 +609,38 @@ function AnalyticsPage() {
           return `${range}<br/>${count} 条（${share}%）`
         }
       },
-      xAxis: { type: 'category', data: labels, name: '字符数' },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: counts, itemStyle: { color: '#07c160', borderRadius: [4, 4, 0, 0] } }]
+      grid: { left: 44, right: 16, top: 28, bottom: 40 },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        name: '字符数',
+        axisLabel: { color: chartTheme.mutedText },
+        axisLine: { lineStyle: { color: chartTheme.line } }
+      },
+      yAxis: {
+        type: 'value',
+        splitLine: { lineStyle: { color: chartTheme.line, type: 'dashed' } },
+        axisLabel: { color: chartTheme.mutedText }
+      },
+      series: [{
+        type: 'bar',
+        data: counts,
+        barMaxWidth: 36,
+        itemStyle: {
+          borderRadius: [8, 8, 2, 2],
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#60a5fa' },
+              { offset: 1, color: '#2563eb' }
+            ]
+          }
+        }
+      }]
     }
   }
 
@@ -718,15 +798,68 @@ function AnalyticsPage() {
 
   const selfSentDailyRatioData = getSelfSentDailyRatioData()
 
-  const renderPageShell = (content: ReactNode) => (
-    <div className="analytics-page-shell">
-      <ChatAnalysisHeader currentMode="private" />
-      {content}
-    </div>
+  const handleExportLongImage = useCallback(async () => {
+    if (!exportRootRef.current || isExporting || !isLoaded) return
+    setIsExporting(true)
+    setExportMessage('')
+    try {
+      const dirResult = await window.electronAPI.dialog.openDirectory({
+        title: '选择聊天分析长图导出目录',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      if (dirResult.canceled || !dirResult.filePaths?.[0]) {
+        setIsExporting(false)
+        return
+      }
+      const root = exportRootRef.current
+      root.classList.add('exporting-capture')
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      const canvas = await html2canvas(root, {
+        backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: root.scrollWidth,
+        windowHeight: root.scrollHeight
+      })
+      root.classList.remove('exporting-capture')
+      const dataUrl = canvas.toDataURL('image/png')
+      const stamp = new Date()
+      const name = `MSG私聊分析_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}_${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}.png`
+      const exportResult = await window.electronAPI.annualReport.exportImages({
+        baseDir: dirResult.filePaths[0],
+        folderName: 'MSG聊天分析导出',
+        images: [{ name, dataUrl }]
+      })
+      if (!exportResult.success) throw new Error(exportResult.error || '导出失败')
+      setExportMessage(`已导出：${exportResult.dir || dirResult.filePaths[0]}`)
+    } catch (error: any) {
+      exportRootRef.current?.classList.remove('exporting-capture')
+      setExportMessage(error?.message || String(error) || '导出失败')
+    } finally {
+      setIsExporting(false)
+    }
+  }, [isExporting, isLoaded])
+
+  const exportButtonDisabled = isLoading || isExporting || !isLoaded
+
+  const renderExportButton = (variant: 'header' | 'banner' = 'header') => (
+    <button
+      type="button"
+      className={`analytics-export-btn analytics-export-btn--${variant}`}
+      onClick={() => void handleExportLongImage()}
+      disabled={exportButtonDisabled}
+      title={!isLoaded ? '请先完成分析后再导出' : '将当前分析结果导出为一张长图 PNG'}
+      data-testid="analytics-export-long-image"
+    >
+      {isExporting ? <Loader2 size={16} className="spin" /> : <ImageDown size={16} />}
+      <span>{isExporting ? '导出中...' : '导出长图'}</span>
+    </button>
   )
 
   const analyticsHeaderActions = (
     <>
+      {renderExportButton('header')}
       <button className="btn btn-secondary" onClick={handleRefresh} disabled={isLoading}>
         <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
         {isLoading ? '刷新中...' : '刷新'}
@@ -738,6 +871,13 @@ function AnalyticsPage() {
     </>
   )
 
+  const renderPageShell = (content: ReactNode, actions?: ReactNode) => (
+    <div className="analytics-page-shell">
+      <ChatAnalysisHeader currentMode="private" actions={actions} />
+      {content}
+    </div>
+  )
+
   if (isLoading && !isLoaded) {
     return renderPageShell(
       <div className="loading-container">
@@ -747,7 +887,8 @@ function AnalyticsPage() {
           <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
         </div>
         <span className="progress-percent">{progress}%</span>
-      </div>
+      </div>,
+      analyticsHeaderActions
     )
   }
 
@@ -763,7 +904,8 @@ function AnalyticsPage() {
             重试
           </button>
         </div>
-      </div>
+      </div>,
+      analyticsHeaderActions
     )
   }
 
@@ -772,7 +914,8 @@ function AnalyticsPage() {
       <div className="error-container">
         <p>{error}</p>
         <button className="btn btn-primary" onClick={() => loadData(true)}>重试</button>
-      </div>
+      </div>,
+      analyticsHeaderActions
     )
   }
 
@@ -781,31 +924,48 @@ function AnalyticsPage() {
     <div className="analytics-page-shell">
       <ChatAnalysisHeader currentMode="private" actions={analyticsHeaderActions} />
       <div className="page-scroll">
+        {exportMessage && <div className="analytics-export-toast">{exportMessage}</div>}
+        <div className="analytics-export-root" ref={exportRootRef}>
         <section className="page-section">
+          <div className="analytics-report-banner">
+            <div>
+              <h2>私聊分析总览</h2>
+              <p>消息结构 · 活跃节律 · 词频与关系强度</p>
+            </div>
+            <div className="analytics-report-banner-side">
+              {statistics && (
+                <div className="analytics-report-banner-meta">
+                  <Clock size={14} />
+                  <span>{formatDate(statistics.firstMessageTime)} — {formatDate(statistics.lastMessageTime)}</span>
+                </div>
+              )}
+              {renderExportButton('banner')}
+            </div>
+          </div>
           <div className="stats-overview">
-            <div className="stat-card">
-              <div className="stat-icon"><MessageSquare size={24} /></div>
+            <div className="stat-card tone-total">
+              <div className="stat-icon"><MessageSquare size={22} strokeWidth={2.25} /></div>
               <div className="stat-info">
                 <span className="stat-value">{formatNumber(statistics?.totalMessages || 0)}</span>
                 <span className="stat-label">总消息数</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Send size={24} /></div>
+            <div className="stat-card tone-sent">
+              <div className="stat-icon"><Send size={22} strokeWidth={2.25} /></div>
               <div className="stat-info">
                 <span className="stat-value">{formatNumber(statistics?.sentMessages || 0)}</span>
                 <span className="stat-label">发送消息</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Inbox size={24} /></div>
+            <div className="stat-card tone-recv">
+              <div className="stat-icon"><Inbox size={22} strokeWidth={2.25} /></div>
               <div className="stat-info">
                 <span className="stat-value">{formatNumber(statistics?.receivedMessages || 0)}</span>
                 <span className="stat-label">接收消息</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon"><Calendar size={24} /></div>
+            <div className="stat-card tone-days">
+              <div className="stat-icon"><Calendar size={22} strokeWidth={2.25} /></div>
               <div className="stat-info">
                 <span className="stat-value">{statistics?.activeDays || 0}</span>
                 <span className="stat-label">活跃天数</span>
@@ -887,6 +1047,7 @@ function AnalyticsPage() {
             ))}
           </div>
         </section>
+        </div>
       </div>
       {isExcludeDialogOpen && (
         <div className="exclude-modal-overlay" onClick={() => setIsExcludeDialogOpen(false)}>

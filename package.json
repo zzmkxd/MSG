@@ -1,6 +1,6 @@
 {
   "name": "msg",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Windows 微信消息浏览/导出工具",
   "main": "dist-electron/main.js",
   "author": "Ourten",
@@ -90,6 +90,7 @@
     "appId": "com.msg.app",
     "productName": "MSG",
     "artifactName": "${productName}-${version}-Setup.${ext}",
+    "buildVersion": "20261116",
     "directories": {
       "output": "release"
     },

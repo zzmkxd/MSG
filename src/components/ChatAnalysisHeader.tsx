@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './ChatAnalysisHeader.scss'
 
-export type ChatAnalysisMode = 'private' | 'group'
+export type ChatAnalysisMode = 'private' | 'group' | 'dual'
 
 interface ChatAnalysisHeaderProps {
   currentMode: ChatAnalysisMode
@@ -18,16 +18,22 @@ const MODE_CONFIG: Record<ChatAnalysisMode, { label: string; path: string }> = {
   group: {
     label: '群聊分析',
     path: '/analytics/group'
+  },
+  dual: {
+    label: '双人分析',
+    path: '/analytics/dual'
   }
 }
+
+const MODE_ORDER: ChatAnalysisMode[] = ['private', 'dual', 'group']
 
 function ChatAnalysisHeader({ currentMode, actions }: ChatAnalysisHeaderProps) {
   const navigate = useNavigate()
   const currentLabel = MODE_CONFIG[currentMode].label
   const [menuOpen, setMenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
-  const alternateMode = useMemo(
-    () => (currentMode === 'private' ? 'group' : 'private'),
+  const otherModes = useMemo(
+    () => MODE_ORDER.filter((mode) => mode !== currentMode),
     [currentMode]
   )
 
@@ -81,17 +87,20 @@ function ChatAnalysisHeader({ currentMode, actions }: ChatAnalysisHeaderProps) {
 
           {menuOpen && (
             <div className="chat-analysis-menu" role="menu" aria-label="切换聊天分析类型">
-              <button
-                type="button"
-                role="menuitem"
-                className="chat-analysis-menu-item"
-                onClick={() => {
-                  setMenuOpen(false)
-                  navigate(MODE_CONFIG[alternateMode].path)
-                }}
-              >
-                {MODE_CONFIG[alternateMode].label}
-              </button>
+              {otherModes.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="menuitem"
+                  className="chat-analysis-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    navigate(MODE_CONFIG[mode].path)
+                  }}
+                >
+                  {MODE_CONFIG[mode].label}
+                </button>
+              ))}
             </div>
           )}
         </div>

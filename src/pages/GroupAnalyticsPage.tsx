@@ -584,8 +584,9 @@ function GroupAnalyticsPage() {
             return
           }
           if (!result.success || !result.data) {
+            setAnalyticsError(result.error || '获取成员列表失败')
             finishBackgroundTask(taskId, 'failed', { detail: result.error || '获取成员列表失败' })
-            return
+            break
           }
           setMembers(result.data)
           let targetMember = preferredMemberUsername
@@ -596,8 +597,9 @@ function GroupAnalyticsPage() {
             setSelectedMessageMemberUsername(targetMember.username)
           }
           if (!targetMember) {
+            setAnalyticsError('找不到目标成员')
             finishBackgroundTask(taskId, 'failed', { detail: '找不到目标成员' })
-            return
+            break
           }
           updateBackgroundTask(taskId, {
             detail: `正在分析 ${targetMember.displayName || targetMember.username} 的发言记录`,
@@ -667,7 +669,11 @@ function GroupAnalyticsPage() {
             finishBackgroundTask(taskId, 'canceled', { detail: '已停止后续加载，群消息类型统计未继续写入' })
             return
           }
-          if (result.success && result.data) setMediaStats(result.data)
+          if (result.success && result.data) {
+            setMediaStats(result.data)
+          } else {
+            setMediaStats({ typeCounts: [], total: 0 })
+          }
           finishBackgroundTask(taskId, result.success ? 'completed' : 'failed', {
             detail: result.success ? `群消息类型统计完成，共 ${result.data?.total || 0} 条` : (result.error || '读取群消息类型统计失败'),
             progressText: result.success ? `${result.data?.total || 0} 条` : '失败'
@@ -677,6 +683,12 @@ function GroupAnalyticsPage() {
       }
     } catch (e) {
       console.error(e)
+      if (func === 'memberAnalytics') {
+        setAnalyticsError(String(e))
+      }
+      if (func === 'mediaStats') {
+        setMediaStats({ typeCounts: [], total: 0 })
+      }
       finishBackgroundTask(taskId, 'failed', {
         detail: String(e)
       })
@@ -1217,6 +1229,7 @@ function GroupAnalyticsPage() {
               onStartDateChange={setStartDate}
               onEndDateChange={setEndDate}
               onRangeComplete={handleDateRangeComplete}
+              emptyLabel="全部时间"
             />
           )}
           {selectedFunction === 'members' && (
@@ -1441,7 +1454,9 @@ function GroupAnalyticsPage() {
                       </div>
                       {analyticsError ? (
                         <div className="member-message-empty">{analyticsError}</div>
-                      ) : memberAnalyticsData ? (
+                      ) : !memberAnalyticsData ? (
+                        <div className="member-message-empty">暂无该成员的分析数据。</div>
+                      ) : (
                         <div className="analytics-content-scrollable" style={{ padding: '0', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                           <div className="stats-overview">
                             <div className="stat-card">
@@ -1543,8 +1558,6 @@ function GroupAnalyticsPage() {
                             </div>
                           </div>
                         </div>
-                      ) : (
-                        <div className="content-loading"><Loader2 size={32} className="spin" /></div>
                       )}
                     </>
                   )}
@@ -1552,19 +1565,23 @@ function GroupAnalyticsPage() {
               )}
               {selectedFunction === 'ranking' && (
                 <div className="rankings-list">
-                  {rankings.map((item, index) => (
-                    <div key={item.member.username} className="ranking-item">
-                      <span className={`rank ${index < 3 ? 'top' : ''}`}>{index + 1}</span>
-                      <div className="contact-avatar">
-                        <Avatar src={item.member.avatarUrl} name={item.member.displayName} size={40} />
-                        {index < 3 && <div className={`medal medal-${index + 1}`}><Medal size={10} /></div>}
+                  {rankings.length === 0 ? (
+                    <div className="member-message-empty">当前时间范围内暂无发言排行数据。</div>
+                  ) : (
+                    rankings.map((item, index) => (
+                      <div key={item.member.username} className="ranking-item">
+                        <span className={`rank ${index < 3 ? 'top' : ''}`}>{index + 1}</span>
+                        <div className="contact-avatar">
+                          <Avatar src={item.member.avatarUrl} name={item.member.displayName} size={40} />
+                          {index < 3 && <div className={`medal medal-${index + 1}`}><Medal size={10} /></div>}
+                        </div>
+                        <div className="contact-info">
+                          <span className="contact-name">{item.member.displayName}</span>
+                        </div>
+                        <span className="message-count">{formatNumber(item.messageCount)} 条</span>
                       </div>
-                      <div className="contact-info">
-                        <span className="contact-name">{item.member.displayName}</span>
-                      </div>
-                      <span className="message-count">{formatNumber(item.messageCount)} 条</span>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               )}
               {selectedFunction === 'activeHours' && (
@@ -1572,35 +1589,39 @@ function GroupAnalyticsPage() {
                   <ReactECharts option={getHourlyOption()} style={{ height: '100%', minHeight: 300 }} />
                 </div>
               )}
-              {selectedFunction === 'mediaStats' && mediaStats && (
-                <div className="media-stats">
-                  <div className="media-layout">
-                    <div className="chart-container">
-                      <ReactECharts option={getMediaOption()} style={{ height: '100%', minHeight: 300 }} />
-                    </div>
-                    <div className="media-legend">
-                      {mediaStats.typeCounts.map(item => {
-                        const colorMap: Record<number, string> = {
-                          1: '#3b82f6', 3: '#22c55e', 34: '#f97316',
-                          43: '#a855f7', 47: '#ec4899', 49: '#14b8a6', [-1]: '#6b7280'
-                        }
-                        const percentage = mediaStats.total > 0 ? ((item.count / mediaStats.total) * 100).toFixed(1) : '0'
-                        return (
-                          <div key={item.type} className="legend-item">
-                            <span className="legend-color" style={{ backgroundColor: colorMap[item.type] || '#6b7280' }} />
-                            <span className="legend-name">{item.name}</span>
-                            <span className="legend-count">{formatNumber(item.count)} 条</span>
-                            <span className="legend-percent">({percentage}%)</span>
-                          </div>
-                        )
-                      })}
-                      <div className="legend-total">
-                        <span>总计</span>
-                        <span>{formatNumber(mediaStats.total)} 条</span>
+              {selectedFunction === 'mediaStats' && (
+                mediaStats && mediaStats.typeCounts.length > 0 ? (
+                  <div className="media-stats">
+                    <div className="media-layout">
+                      <div className="chart-container">
+                        <ReactECharts option={getMediaOption()} style={{ height: '100%', minHeight: 300 }} />
+                      </div>
+                      <div className="media-legend">
+                        {mediaStats.typeCounts.map(item => {
+                          const colorMap: Record<number, string> = {
+                            1: '#3b82f6', 3: '#22c55e', 34: '#f97316',
+                            43: '#a855f7', 47: '#ec4899', 49: '#14b8a6', [-1]: '#6b7280'
+                          }
+                          const percentage = mediaStats.total > 0 ? ((item.count / mediaStats.total) * 100).toFixed(1) : '0'
+                          return (
+                            <div key={item.type} className="legend-item">
+                              <span className="legend-color" style={{ backgroundColor: colorMap[item.type] || '#6b7280' }} />
+                              <span className="legend-name">{item.name}</span>
+                              <span className="legend-count">{formatNumber(item.count)} 条</span>
+                              <span className="legend-percent">({percentage}%)</span>
+                            </div>
+                          )
+                        })}
+                        <div className="legend-total">
+                          <span>总计</span>
+                          <span>{formatNumber(mediaStats.total)} 条</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="member-message-empty">当前时间范围内暂无媒体类型统计。</div>
+                )
               )}
             </>
           )}

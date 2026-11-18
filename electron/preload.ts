@@ -292,6 +292,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       limit?: number
       offset?: number
     }) => ipcRenderer.invoke('chat:getMediaStream', options),
+    getMediaTotals: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }) => ipcRenderer.invoke('chat:getMediaTotals', options),
+    startMediaIndex: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }, forceRebuild?: boolean) => ipcRenderer.invoke('chat:startMediaIndex', options, forceRebuild),
+    getMediaIndexSnapshot: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }) => ipcRenderer.invoke('chat:getMediaIndexSnapshot', options),
+    getMediaIndexProgress: () => ipcRenderer.invoke('chat:getMediaIndexProgress'),
+    onMediaIndexProgress: (callback: (payload: {
+      key: string
+      status: 'idle' | 'building' | 'ready' | 'error'
+      indexed: number
+      totalEstimated: number | null
+      error?: string
+      fromCache?: boolean
+      itemsDelta?: any[]
+      items?: any[]
+    }) => void) => {
+      const listener = (_: any, payload: any) => callback(payload)
+      ipcRenderer.on('chat:mediaIndexProgress', listener)
+      return () => ipcRenderer.removeListener('chat:mediaIndexProgress', listener)
+    },
     resolveVoiceCache: (sessionId: string, msgId: string) => ipcRenderer.invoke('chat:resolveVoiceCache', sessionId, msgId),
     getVoiceTranscript: (sessionId: string, msgId: string, createTime?: number, serverId?: string | number) => ipcRenderer.invoke('chat:getVoiceTranscript', sessionId, msgId, createTime, serverId),
     onVoiceTranscriptPartial: (callback: (payload: { sessionId?: string; msgId: string; createTime?: number; text: string }) => void) => {
@@ -508,6 +541,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dualReport: {
     generateReport: (payload: { friendUsername: string; year: number }) =>
       ipcRenderer.invoke('dualReport:generateReport', payload),
+    onProgress: (callback: (payload: { status: string; progress: number }) => void) => {
+      ipcRenderer.on('dualReport:progress', (_, payload) => callback(payload))
+      return () => ipcRenderer.removeAllListeners('dualReport:progress')
+    }
+  },
+  dualAnalytics: {
+    getDashboard: (payload: { friendUsername: string; beginTimestamp?: number; endTimestamp?: number }) =>
+      ipcRenderer.invoke('dualAnalytics:getDashboard', payload),
     onProgress: (callback: (payload: { status: string; progress: number }) => void) => {
       ipcRenderer.on('dualReport:progress', (_, payload) => callback(payload))
       return () => ipcRenderer.removeAllListeners('dualReport:progress')

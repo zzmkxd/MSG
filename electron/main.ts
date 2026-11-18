@@ -37,6 +37,7 @@ import { normalizeWeiboCookieInput, weiboService } from './services/social/weibo
 import { bizService } from './services/bizService'
 import { backupService } from './services/backupService'
 import { imageDownloadService } from './services/imageDownloadService'
+import { mediaIndexService } from './services/mediaIndexService'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -3048,6 +3049,41 @@ function registerIpcHandlers() {
   }) => {
     return wcdbService.getMediaStream(options)
   })
+  ipcMain.handle('chat:getMediaTotals', async (_, options?: {
+    sessionId?: string
+    mediaType?: 'image' | 'video' | 'all'
+    beginTimestamp?: number
+    endTimestamp?: number
+  }) => {
+    return mediaIndexService.getMediaTotals(options)
+  })
+  ipcMain.handle('chat:startMediaIndex', async (_, options?: {
+    sessionId?: string
+    mediaType?: 'image' | 'video' | 'all'
+    beginTimestamp?: number
+    endTimestamp?: number
+  }, forceRebuild?: boolean) => {
+    const run = mediaIndexService.ensureIndex(options || {}, { forceRebuild: Boolean(forceRebuild) })
+    // 缓存命中通常很快；未命中则 120ms 后返回 building，后续靠 progress 事件灌数据
+    const quick = await Promise.race([
+      run,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 120))
+    ])
+    if (quick) return quick
+    void run
+    return mediaIndexService.getProgress()
+  })
+  ipcMain.handle('chat:getMediaIndexSnapshot', async (_, options?: {
+    sessionId?: string
+    mediaType?: 'image' | 'video' | 'all'
+    beginTimestamp?: number
+    endTimestamp?: number
+  }) => {
+    return mediaIndexService.getSnapshot(options || {})
+  })
+  ipcMain.handle('chat:getMediaIndexProgress', async () => {
+    return mediaIndexService.getProgress()
+  })
   ipcMain.handle('chat:resolveVoiceCache', async (_, sessionId: string, msgId: string) => {
     return chatService.resolveVoiceCache(sessionId, msgId)
   })
@@ -3359,10 +3395,10 @@ function registerIpcHandlers() {
         }
       }
 
-      const maxConcurrentRaw = Number(process.env.WEFLOW_IMAGE_RESOLVE_BATCH_CONCURRENCY || 3)
+      const maxConcurrentRaw = Number(process.env.WEFLOW_IMAGE_RESOLVE_BATCH_CONCURRENCY || 5)
       const maxConcurrent = Number.isFinite(maxConcurrentRaw)
         ? Math.max(1, Math.min(Math.floor(maxConcurrentRaw), 12))
-        : 3
+        : 5
       const workerCount = Math.min(maxConcurrent, list.length)
 
       const rows: Array<{ success: boolean; localPath?: string; hasUpdate?: boolean; error?: string }> = new Array(list.length)
@@ -4346,7 +4382,12 @@ function registerIpcHandlers() {
     })
   })
 
-  ipcMain.handle('dualReport:generateReport', async (_, payload: { friendUsername: string; year: number }) => {
+  const runDualReportWorker = async (payload: {
+    friendUsername: string
+    year?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }) => {
     const cfg = configService || new ConfigService()
     configService = cfg
 
@@ -4357,6 +4398,8 @@ function registerIpcHandlers() {
     const friendUsername = payload?.friendUsername
     const year = payload?.year ?? 0
     const excludeWords = cfg.get('wordCloudExcludeWords') || []
+    const beginTimestamp = Number.isFinite(payload?.beginTimestamp) ? Number(payload.beginTimestamp) : undefined
+    const endTimestamp = Number.isFinite(payload?.endTimestamp) ? Number(payload.endTimestamp) : undefined
 
     if (!friendUsername) {
       return { success: false, error: '缺少好友用户名' }
@@ -4371,7 +4414,19 @@ function registerIpcHandlers() {
 
     return await new Promise((resolve) => {
       const worker = new Worker(workerPath, {
-        workerData: { year, friendUsername, dbPath, decryptKey, myWxid: wxid, resourcesPath, userDataPath, logEnabled, excludeWords }
+        workerData: {
+          year,
+          friendUsername,
+          dbPath,
+          decryptKey,
+          myWxid: wxid,
+          resourcesPath,
+          userDataPath,
+          logEnabled,
+          excludeWords,
+          beginTimestamp,
+          endTimestamp
+        }
       })
 
       const cleanup = () => {
@@ -4412,7 +4467,26 @@ function registerIpcHandlers() {
         }
       })
     })
+  }
+
+  ipcMain.handle('dualReport:generateReport', async (_, payload: { friendUsername: string; year: number }) => {
+    return runDualReportWorker({
+      friendUsername: payload?.friendUsername,
+      year: payload?.year ?? 0
+    })
   })
+
+  ipcMain.handle(
+    'dualAnalytics:getDashboard',
+    async (_, payload: { friendUsername: string; beginTimestamp?: number; endTimestamp?: number }) => {
+      return runDualReportWorker({
+        friendUsername: payload?.friendUsername,
+        year: 0,
+        beginTimestamp: payload?.beginTimestamp,
+        endTimestamp: payload?.endTimestamp
+      })
+    }
+  )
 
   ipcMain.handle('annualReport:exportImages', async (_, payload: { baseDir: string; folderName: string; images: Array<{ name: string; dataUrl: string }> }) => {
     try {

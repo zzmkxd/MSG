@@ -122,14 +122,14 @@ export class ImagePreloadService {
     activeDecrypt: 0,
     activeIdentities: 0
   }
-  private readonly maxCacheConcurrent = 4
-  private readonly maxDecryptConcurrent = 2
+  private readonly maxCacheConcurrent = 6
+  private readonly maxDecryptConcurrent = 3
   private readonly maxQueueSize = 320
   private readonly maxLowPriorityQueueSize = 160
   private readonly lowPrioritySoftQueueSize = 240
   private readonly canceledScopeTtlMs = 2 * 60 * 1000
   private readonly activeCacheSnapshotCooldownMs = 1800
-  private readonly lowPriorityIdleDelayMs = 1500
+  private readonly lowPriorityIdleDelayMs = 800
 
   enqueue(payloads: PreloadImagePayload[], options?: PreloadOptions): PreloadEnqueueResult {
     const result = this.createEnqueueResult(Array.isArray(payloads) ? payloads.length : 0)

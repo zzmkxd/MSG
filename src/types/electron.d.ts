@@ -821,6 +821,106 @@ export interface ElectronAPI {
       elapsedMs?: number
       error?: string
     }>
+    getMediaTotals: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }) => Promise<{
+      success: boolean
+      total?: number
+      imageTotal?: number
+      videoTotal?: number
+      sessionCount?: number
+      error?: string
+    }>
+    startMediaIndex: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }, forceRebuild?: boolean) => Promise<{
+      key: string
+      status: 'idle' | 'building' | 'ready' | 'error'
+      indexed: number
+      totalEstimated: number | null
+      error?: string
+      fromCache?: boolean
+    }>
+    getMediaIndexSnapshot: (options?: {
+      sessionId?: string
+      mediaType?: 'image' | 'video' | 'all'
+      beginTimestamp?: number
+      endTimestamp?: number
+    }) => Promise<{
+      success: boolean
+      key?: string
+      status?: 'idle' | 'building' | 'ready' | 'error'
+      items?: Array<{
+        sessionId: string
+        sessionDisplayName?: string
+        mediaType: 'image' | 'video'
+        localId: number
+        serverId?: string
+        createTime: number
+        localType: number
+        senderUsername?: string
+        isSend?: number | null
+        imageMd5?: string
+        imageDatName?: string
+        videoMd5?: string
+        content?: string
+      }>
+      totalEstimated?: number | null
+      indexed?: number
+      error?: string
+    }>
+    getMediaIndexProgress: () => Promise<{
+      key: string
+      status: 'idle' | 'building' | 'ready' | 'error'
+      indexed: number
+      totalEstimated: number | null
+      error?: string
+      fromCache?: boolean
+    }>
+    onMediaIndexProgress: (callback: (payload: {
+      key: string
+      status: 'idle' | 'building' | 'ready' | 'error'
+      indexed: number
+      totalEstimated: number | null
+      error?: string
+      fromCache?: boolean
+      itemsDelta?: Array<{
+        sessionId: string
+        sessionDisplayName?: string
+        mediaType: 'image' | 'video'
+        localId: number
+        serverId?: string
+        createTime: number
+        localType: number
+        senderUsername?: string
+        isSend?: number | null
+        imageMd5?: string
+        imageDatName?: string
+        videoMd5?: string
+        content?: string
+      }>
+      items?: Array<{
+        sessionId: string
+        sessionDisplayName?: string
+        mediaType: 'image' | 'video'
+        localId: number
+        serverId?: string
+        createTime: number
+        localType: number
+        senderUsername?: string
+        isSend?: number | null
+        imageMd5?: string
+        imageDatName?: string
+        videoMd5?: string
+        content?: string
+      }>
+    }) => void) => () => void
     resolveVoiceCache: (sessionId: string, msgId: string) => Promise<{ success: boolean; hasCache: boolean; data?: string }>
     getVoiceTranscript: (sessionId: string, msgId: string, createTime?: number, serverId?: string | number) => Promise<{ success: boolean; transcript?: string; error?: string }>
     onVoiceTranscriptPartial: (callback: (payload: { sessionId?: string; msgId: string; createTime?: number; text: string }) => void) => () => void
@@ -1529,6 +1629,14 @@ export interface ElectronAPI {
       }
       error?: string
     }>
+    onProgress: (callback: (payload: { status: string; progress: number }) => void) => () => void
+  }
+  dualAnalytics: {
+    getDashboard: (payload: {
+      friendUsername: string
+      beginTimestamp?: number
+      endTimestamp?: number
+    }) => Promise<{ success: boolean; data?: any; error?: string }>
     onProgress: (callback: (payload: { status: string; progress: number }) => void) => () => void
   }
   export: {

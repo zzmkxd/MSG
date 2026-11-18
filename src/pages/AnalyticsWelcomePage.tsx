@@ -33,7 +33,7 @@ function AnalyticsWelcomePage() {
                     <h1>私聊数据分析</h1>
                     <p>
                         分析你的好友聊天记录，生成详细统计报表。<br />
-                        选择加载上次结果或开始新分析。
+                        选择加载上次结果或开始新分析。进入分析页后可一键「导出长图」。
                     </p>
 
                     <div className="analytics-welcome-actions">
