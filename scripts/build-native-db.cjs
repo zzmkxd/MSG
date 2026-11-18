@@ -19,6 +19,8 @@ const { join } = require('path')
 const os = require('os')
 
 const REPO_URL = 'https://github.com/334456777/WeFlow.git'
+// main 已移除 weflow-wcdb-ffi；v5.0.1 仍是 drop-in wcdb_api 替代（无过期检查）
+const REPO_REF = process.env.WEFLOW_RUST_REF || 'v5.0.1'
 const WORK_DIR = join(os.tmpdir(), 'weflow-rust-build')
 const DLL_SRC = join(WORK_DIR, 'target', 'release', 'weflow_wcdb.dll')
 const DLL_DST = join(__dirname, '..', 'resources', 'wcdb', 'win32', 'x64', 'wcdb_api.dll')
@@ -45,14 +47,26 @@ function main() {
       process.exit(1)
     }
   }
-  // 2) 克隆/更新源码（浅克隆即可，rust-toolchain.toml 会钉住 1.99.0）
-  if (!existsSync(join(WORK_DIR, 'crates'))) {
-    console.log(`[native-db] 克隆 ${REPO_URL} ...`)
-    run('git', ['clone', '--depth', '1', REPO_URL, WORK_DIR])
+  // 2) 克隆并钉住仍含 weflow-wcdb-ffi 的 tag（勿跟 main：FFI crate 已删）
+  if (!existsSync(join(WORK_DIR, '.git'))) {
+    console.log(`[native-db] 克隆 ${REPO_URL} @ ${REPO_REF} ...`)
+    run('git', ['clone', '--depth', '1', '--branch', REPO_REF, REPO_URL, WORK_DIR])
   } else {
-    run('git', ['-C', WORK_DIR, 'pull', '--ff-only'])
+    console.log(`[native-db] 检出 ${REPO_REF} ...`)
+    // 本地已有 tag 时不联网；没有再浅取
+    const hasRef = spawnSync('git', ['-C', WORK_DIR, 'rev-parse', '--verify', `refs/tags/${REPO_REF}`], {
+      stdio: 'ignore'
+    })
+    if (hasRef.status !== 0) {
+      run('git', ['-C', WORK_DIR, 'fetch', '--depth', '1', 'origin', 'tag', REPO_REF])
+    }
+    run('git', ['-C', WORK_DIR, 'checkout', '-f', REPO_REF])
   }
-  // 3) 构建（首次约 10~30 分钟：下载工具链 1.99.0 + 编译 bundled SQLite）
+  if (!existsSync(join(WORK_DIR, 'crates', 'weflow-wcdb-ffi', 'Cargo.toml'))) {
+    console.error(`[native-db] ${REPO_REF} 无 crates/weflow-wcdb-ffi；换 WEFLOW_RUST_REF=v5.0.1`)
+    process.exit(1)
+  }
+  // 3) 构建（首次约 10~30 分钟：工具链 + bundled SQLite）
   console.log('[native-db] 构建 weflow-wcdb-ffi（release）...')
   run(cargo, ['build', '--release', '-p', 'weflow-wcdb-ffi'], { cwd: WORK_DIR })
   if (!existsSync(DLL_SRC)) {
